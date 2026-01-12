@@ -4,12 +4,61 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Mapping
 
-from sqlalchemy import bindparam, text
+from sqlalchemy import DateTime, Integer, String, Text, func, select
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 DEFAULT_SOURCE = "upload"
 DEFAULT_PUBLISH_VENUE = "unknown"
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class FileResource(Base):
+    __tablename__ = "file_resource"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    path: Mapped[str] = mapped_column(String(256))
+    name: Mapped[str] = mapped_column(String(128))
+    type: Mapped[str | None] = mapped_column(String(16))
+    source: Mapped[str] = mapped_column(String(64))
+    created_time: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class FileMetadata(Base):
+    __tablename__ = "file_metadata"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    file_id: Mapped[int] = mapped_column(Integer)
+    source: Mapped[str] = mapped_column(String(64))
+    title: Mapped[str] = mapped_column(String(256))
+    authors: Mapped[str | None] = mapped_column(String(255))
+    institutions: Mapped[str | None] = mapped_column(String(255))
+    publish_year: Mapped[datetime | None] = mapped_column(DateTime)
+    publish_venue: Mapped[str] = mapped_column(String(64))
+    keywords: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    abstract: Mapped[str | None] = mapped_column(Text)
+    language: Mapped[str | None] = mapped_column(String(32))
+    created_time: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+    update_time: Mapped[datetime] = mapped_column(DateTime)
+
+
+class DocParsed(Base):
+    __tablename__ = "doc_parsed"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    doc_id: Mapped[int] = mapped_column(Integer)
+    full_text: Mapped[str] = mapped_column(Text)
+    structure_info: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    parse_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    status: Mapped[str] = mapped_column(String(32))
+    error_info: Mapped[str | None] = mapped_column(Text)
 
 
 @dataclass(frozen=True)
@@ -32,132 +81,86 @@ def store_parsed_document(
     normalized_metadata = _normalize_metadata(metadata, default_title=file_name)
     update_time = datetime.utcnow()
 
-    session.execute(_LOCK_TABLES_SQL)
-    file_resource_id = _next_id(session, "file_resource")
-    file_metadata_id = _next_id(session, "file_metadata")
-    doc_parsed_id = _next_id(session, "doc_parsed")
+    # Serialize id allocation across the three tables.
+    session.execute(select(func.pg_advisory_xact_lock(_DOCUMENTS_WRITE_LOCK_ID)))
 
-    session.execute(
-        _FILE_RESOURCE_INSERT,
-        {
-            "id": file_resource_id,
-            "path": file_path,
-            "name": file_name,
-            "type": doc_type,
-            "source": normalized_metadata["source"],
-        },
+    ids = _allocate_document_ids(session)
+
+    file_resource = FileResource(
+        id=ids.file_resource_id,
+        path=file_path,
+        name=file_name,
+        type=doc_type,
+        source=normalized_metadata["source"],
+    )
+    file_metadata = FileMetadata(
+        id=ids.file_metadata_id,
+        file_id=ids.file_resource_id,
+        source=normalized_metadata["source"],
+        title=normalized_metadata["title"],
+        authors=normalized_metadata["authors"],
+        institutions=normalized_metadata["institutions"],
+        publish_year=normalized_metadata["publish_year"],
+        publish_venue=normalized_metadata["publish_venue"],
+        keywords=normalized_metadata["keywords"],
+        abstract=normalized_metadata["abstract"],
+        language=normalized_metadata["language"],
+        update_time=update_time,
+    )
+    doc_parsed = DocParsed(
+        id=ids.doc_parsed_id,
+        doc_id=ids.file_resource_id,
+        full_text=full_text,
+        structure_info=dict(structure_info),
+        status="success",
+        error_info=None,
     )
 
-    session.execute(
-        _FILE_METADATA_INSERT,
-        {
-            "id": file_metadata_id,
-            "file_id": file_resource_id,
-            "source": normalized_metadata["source"],
-            "title": normalized_metadata["title"],
-            "authors": normalized_metadata["authors"],
-            "institutions": normalized_metadata["institutions"],
-            "publish_year": normalized_metadata["publish_year"],
-            "publish_venue": normalized_metadata["publish_venue"],
-            "keywords": normalized_metadata["keywords"],
-            "abstract": normalized_metadata["abstract"],
-            "language": normalized_metadata["language"],
-            "update_time": update_time,
-        },
-    )
-
-    session.execute(
-        _DOC_PARSED_INSERT,
-        {
-            "id": doc_parsed_id,
-            "doc_id": file_resource_id,
-            "full_text": full_text,
-            "structure_info": structure_info,
-            "status": "success",
-            "error_info": None,
-        },
-    )
+    session.add_all([file_resource, file_metadata, doc_parsed])
 
     return StoredDocument(
+        file_resource_id=ids.file_resource_id,
+        file_metadata_id=ids.file_metadata_id,
+        doc_parsed_id=ids.doc_parsed_id,
+    )
+
+
+_DOCUMENTS_WRITE_LOCK_ID = 814723
+
+
+@dataclass(frozen=True)
+class DocumentIds:
+    file_resource_id: int
+    file_metadata_id: int
+    doc_parsed_id: int
+
+
+def _allocate_document_ids(session: Session) -> DocumentIds:
+    file_resource_id = _next_file_resource_id(session)
+    file_metadata_id = _next_file_metadata_id(session)
+    doc_parsed_id = _next_doc_parsed_id(session)
+    return DocumentIds(
         file_resource_id=file_resource_id,
         file_metadata_id=file_metadata_id,
         doc_parsed_id=doc_parsed_id,
     )
 
 
-def _next_id(session: Session, table_name: str) -> int:
-    stmt = _NEXT_ID_STATEMENTS.get(table_name)
-    if stmt is None:
-        raise ValueError(f"Unknown table for id allocation: {table_name}")
+def _next_file_resource_id(session: Session) -> int:
+    return _select_next_id(session, FileResource.id)
+
+
+def _next_file_metadata_id(session: Session) -> int:
+    return _select_next_id(session, FileMetadata.id)
+
+
+def _next_doc_parsed_id(session: Session) -> int:
+    return _select_next_id(session, DocParsed.id)
+
+
+def _select_next_id(session: Session, column) -> int:
+    stmt = select(func.coalesce(func.max(column), 0) + 1)
     return int(session.execute(stmt).scalar_one())
-
-
-_LOCK_TABLES_SQL = text(
-    "LOCK TABLE file_resource, file_metadata, doc_parsed IN EXCLUSIVE MODE"
-)
-_NEXT_ID_STATEMENTS = {
-    "file_resource": text("SELECT COALESCE(MAX(id), 0) + 1 FROM file_resource"),
-    "file_metadata": text("SELECT COALESCE(MAX(id), 0) + 1 FROM file_metadata"),
-    "doc_parsed": text("SELECT COALESCE(MAX(id), 0) + 1 FROM doc_parsed"),
-}
-_FILE_RESOURCE_INSERT = text(
-    """
-    INSERT INTO file_resource (id, path, name, type, source)
-    VALUES (:id, :path, :name, :type, :source)
-    """
-)
-_FILE_METADATA_INSERT = text(
-    """
-    INSERT INTO file_metadata (
-        id,
-        file_id,
-        source,
-        title,
-        authors,
-        institutions,
-        publish_year,
-        publish_venue,
-        keywords,
-        abstract,
-        language,
-        update_time
-    )
-    VALUES (
-        :id,
-        :file_id,
-        :source,
-        :title,
-        :authors,
-        :institutions,
-        :publish_year,
-        :publish_venue,
-        :keywords,
-        :abstract,
-        :language,
-        :update_time
-    )
-    """
-).bindparams(bindparam("keywords", type_=JSONB))
-_DOC_PARSED_INSERT = text(
-    """
-    INSERT INTO doc_parsed (
-        id,
-        doc_id,
-        full_text,
-        structure_info,
-        status,
-        error_info
-    )
-    VALUES (
-        :id,
-        :doc_id,
-        :full_text,
-        :structure_info,
-        :status,
-        :error_info
-    )
-    """
-).bindparams(bindparam("structure_info", type_=JSONB))
 
 
 def _normalize_metadata(
