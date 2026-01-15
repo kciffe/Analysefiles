@@ -52,7 +52,7 @@ async def parse_doc(
             metadata=normalized["metadata"],
         )
 
-    return ParseResponse(structure_info=normalized["structure_info"])
+    return ParseResponse(md=normalized["full_text"])
 
 
 def _safe_filename(filename: str | None) -> str:

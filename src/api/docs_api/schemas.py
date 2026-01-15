@@ -4,4 +4,4 @@ from pydantic import BaseModel
 
 
 class ParseResponse(BaseModel):
-    structure_info: dict[str, Any]
+    md: str
