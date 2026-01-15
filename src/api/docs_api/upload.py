@@ -41,16 +41,16 @@ async def parse_doc(
 
     normalized = _normalize_parse_result(parse_result)
 
-    with get_session() as session:
-        store_parsed_document(
-            session,
-            file_path=str(stored_path),
-            file_name=safe_name,
-            doc_type=doc_type,
-            full_text=normalized["full_text"],
-            structure_info=normalized["structure_info"],
-            metadata=normalized["metadata"],
-        )
+    # with get_session() as session:
+    #     store_parsed_document(
+    #         session,
+    #         file_path=str(stored_path),
+    #         file_name=safe_name,
+    #         doc_type=doc_type,
+    #         full_text=normalized["full_text"],
+    #         structure_info=normalized["structure_info"],
+    #         metadata=normalized["metadata"],
+    #     )
 
     return ParseResponse(md=normalized["full_text"])
 
