@@ -12,13 +12,14 @@ from src.db import get_session
 from src.repositories.documents import store_parsed_document
 from src.service.parse import ParseService
 from .schemas import ParseResponse
+from ..schemas import ResponseModel
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "data/uploads"))
 
 router = APIRouter()
 
 
-@router.post("/parse", response_model=ParseResponse)
+@router.post("/parse", response_model=ResponseModel[ParseResponse])
 async def parse_doc(
     file: UploadFile = File(...), doc_type: str = Form(...)
 ) -> ParseResponse:
@@ -51,8 +52,11 @@ async def parse_doc(
     #         structure_info=normalized["structure_info"],
     #         metadata=normalized["metadata"],
     #     )
-
-    return ParseResponse(md=normalized["full_text"])
+    
+    return ResponseModel(
+        code=200,
+        data=ParseResponse(md=normalized["full_text"])
+    )
 
 
 def _safe_filename(filename: str | None) -> str:
