@@ -55,7 +55,10 @@ async def parse_doc(
     
     return ResponseModel(
         code=200,
-        data=ParseResponse(md=normalized["full_text"])
+        data=ParseResponse(
+            md=normalized["full_text"],
+            labels=parse_result.labels,
+        )
     )
 
 
