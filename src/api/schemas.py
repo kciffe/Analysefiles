@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 T = TypeVar("_T")
 
-class ResponseModel(Generic[T], BaseModel):
+class ResponseModel(BaseModel, Generic[T]):
     code: int
     msg: str | None
     data: T
