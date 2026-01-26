@@ -50,3 +50,20 @@ create table file_resource
 
 alter table file_resource
     owner to postgres;
+
+create table labels
+(
+    id        bigint generated always as identity
+        constraint labels_pk
+            primary key,
+    top_label varchar(128)              not null,
+    sub_label jsonb default '[]'::jsonb not null
+);
+
+comment on column labels.top_label is '主标签';
+
+comment on column labels.sub_label is '子标签';
+
+alter table labels
+    owner to postgres;
+
