@@ -5,5 +5,5 @@ T = TypeVar("_T")
 
 class ResponseModel(BaseModel, Generic[T]):
     code: int
-    msg: str | None
+    msg: str | None = None
     data: T
