@@ -1,6 +1,6 @@
 from typing import Any, TypedDict, List
 import httpx
-from pydantic import BaseModel, PrivateAttr
+from pydantic import BaseModel
 from openai import OpenAI
 from textwrap import dedent
 
@@ -50,15 +50,18 @@ by `-`.
 # Output format
 You can and only can output labels directly. Don't output anything else.
 
+# Work language
+中文
 """
 
 class ParseService(BaseModel):
 
-    _openai_client = PrivateAttr(
-        OpenAI(base_url="http://localhost:11434/v1", api_key="<EMPTY>"),
-    )
+    openai_client:OpenAI = OpenAI(base_url="http://localhost:11434/v1", api_key="<EMPTY>")
 
     model:str = "qwen3:8b"
+
+    class Config:
+        arbitrary_types_allowed=True
 
     def run(self, *, file_bytes: bytes, file_name: str, doc_type: str) -> ParseResult:
         file_name_splits = file_name.split(".")
@@ -95,8 +98,8 @@ class ParseService(BaseModel):
                 {name}: {",".join(child)}
                 """)
             )
-        
-        completions = self._openai_client.chat.completions.create(
+
+        completions = self.openai_client.chat.completions.create(
             model=self.model,
             messages=[
                 {"role": "system", "content": system_prompt.format(available_labels=available_labels)},
@@ -105,4 +108,11 @@ class ParseService(BaseModel):
         )
 
         # TODO: add checks for llm output in the future.
-        return completions.choices[0].message.content
+        
+        response = completions.choices[0].message.content
+        if "qwen3" in self.model:
+            import re
+            response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
+            response:str = response.strip()
+
+        return response
