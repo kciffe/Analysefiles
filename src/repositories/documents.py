@@ -6,14 +6,14 @@ from typing import Any, Mapping
 
 from sqlalchemy import DateTime, Integer, String, Text, func, select
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+from sqlalchemy.orm import Mapped, Session, mapped_column
+
+from .base import Base
 
 DEFAULT_SOURCE = "upload"
 DEFAULT_PUBLISH_VENUE = "unknown"
 
 
-class Base(DeclarativeBase):
-    pass
 
 
 class FileResource(Base):

@@ -1,7 +1,10 @@
-from typing import Any, TypedDict
+from typing import Any, TypedDict, List
 import httpx
 from pydantic import BaseModel, PrivateAttr
 from openai import OpenAI
+from textwrap import dedent
+
+from ..repositories.labels import Labels, select_labels
 
 class MarkdownContent(TypedDict):
     md_content: str
@@ -82,11 +85,21 @@ class ParseService(BaseModel):
         )
     
     def _label(self, full_text: str):
+        repo_labels:List[Labels] = select_labels()
+        available_labels = []
+        for label in repo_labels:
+            name = label.top_label
+            child = label.sub_label
+            available_labels.append(
+                dedent(f"""
+                {name}: {",".join(child)}
+                """)
+            )
         
         completions = self._openai_client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": system_prompt.format(available_labels=available_labels)},
                 {"role": "user", "content": f"Please label the paper.\n\n{full_text[:3000]}"}
             ]
         )
