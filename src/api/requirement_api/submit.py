@@ -1,26 +1,20 @@
-from datetime import datetime, timezone
-from uuid import uuid4
+from fastapi import APIRouter, HTTPException
 
-from fastapi import APIRouter
-
-from ..schemas import ResponseModel
-from .schemas import RequirementParseRequest, RequirementSubmitResponse
+from src.service.requirement_parse import analyze_requirement
+from .schemas import RequirementParseRequest, RequirementParseResponse
 
 router = APIRouter()
 
 
-@router.post("/parse", response_model=ResponseModel[RequirementSubmitResponse])
+@router.post("/parse", response_model=RequirementParseResponse)
 async def submit_requirement_parse(
     payload: RequirementParseRequest,
-) -> ResponseModel[RequirementSubmitResponse]:
-    task_id = uuid4().hex
-
-    return ResponseModel(
-        code=200,
-        data=RequirementSubmitResponse(
-            id=task_id,
-            name=payload.name,
-            status="pending",
-            createdAt=datetime.now(timezone.utc),
-        ),
-    )
+) -> RequirementParseResponse:
+    try:
+        result = analyze_requirement(payload.model_dump(mode="json"))
+        return RequirementParseResponse.model_validate(result)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Requirement analysis failed: {exc}",
+        ) from exc

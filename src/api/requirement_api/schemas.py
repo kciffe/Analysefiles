@@ -1,5 +1,5 @@
-from datetime import date, datetime
-from typing import List
+from datetime import date
+from typing import List, Literal
 
 from pydantic import BaseModel
 
@@ -13,8 +13,27 @@ class RequirementParseRequest(BaseModel):
     detail: str
 
 
-class RequirementSubmitResponse(BaseModel):
+class ReportBlockText(BaseModel):
     id: str
-    name: str
-    status: str
-    createdAt: datetime
+    type: Literal["text"]
+    title: str
+    content: str
+
+
+class ReportBlockTable(BaseModel):
+    id: str
+    type: Literal["table"]
+    title: str
+    columns: List[str]
+    rows: List[List[str]]
+
+
+class ReportSchema(BaseModel):
+    title: str
+    summary: str
+    blocks: List[ReportBlockText | ReportBlockTable]
+
+
+class RequirementParseResponse(BaseModel):
+    success: bool
+    report: ReportSchema
