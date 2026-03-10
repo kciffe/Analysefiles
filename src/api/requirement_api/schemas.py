@@ -3,7 +3,7 @@ from typing import List, Literal
 
 from pydantic import BaseModel
 
-RequirementStatus = Literal["received", "processing", "success", "failed"]
+RequirementStatus = Literal["已完成", "已发布", "运行中"]
 
 
 class RequirementParseRequest(BaseModel):
@@ -46,3 +46,12 @@ class ReportSchema(BaseModel):
 class RequirementParseResponse(BaseModel):
     success: bool
     report: ReportSchema
+
+
+class RequirementParseResultQueryResponse(BaseModel):
+    id: str
+    name: str
+    status: RequirementStatus
+    createdAt: str
+    result: RequirementParseResponse | None = None
+    error: str | None = None
