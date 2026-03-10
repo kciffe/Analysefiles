@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Response
-from ..schemas import ResponseModel
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+
 from src.service.requirement_jobs import (
     create_requirement_job,
     get_requirement_job,
@@ -11,6 +11,8 @@ from src.service.requirement_jobs import (
     set_requirement_job_success,
 )
 from src.service.requirement_parse import analyze_requirement
+
+from ..schemas import ResponseModel
 from .schemas import (
     RequirementParseRecived,
     RequirementParseRequest,
@@ -20,12 +22,19 @@ from .schemas import (
 
 router = APIRouter()
 
+_STATUS_TO_API = {
+    "received": "已发布",
+    "processing": "运行中",
+    "success": "已完成",
+    "failed": "已失败",
+}
+
 
 @router.post("/parse", response_model=ResponseModel[RequirementParseRecived])
 async def submit_requirement_parse(
     background_tasks: BackgroundTasks,
     payload: RequirementParseRequest,
-) -> ResponseModel:
+) -> ResponseModel[RequirementParseRecived]:
     item_id = uuid4().hex
     created_at = datetime.now(timezone.utc).isoformat()
     requirement_data = payload.model_dump(mode="json")
@@ -37,49 +46,51 @@ async def submit_requirement_parse(
         requirement_data=requirement_data,
     )
 
-    background_tasks.add_task(
-        _run_requirement_analysis,
-        item_id,
-    )
+    background_tasks.add_task(_run_requirement_analysis, item_id)
 
     return ResponseModel(
         code=200,
         msg="成功提交需求解析任务",
-        data= RequirementParseRecived(
+        data=RequirementParseRecived(
             id=item_id,
             name=payload.name,
-            status="运行中",
+            status="已发布",
             createdAt=created_at,
-        )
+        ),
     )
 
 
-
-@router.get("/{item_id}/result", response_model=RequirementParseResultQueryResponse)
+@router.get(
+    "/{item_id}/result",
+    response_model=ResponseModel[RequirementParseResultQueryResponse],
+)
 async def query_requirement_result(
     item_id: str,
-    response: Response,
-) -> RequirementParseResultQueryResponse:
+) -> ResponseModel[RequirementParseResultQueryResponse]:
     job = get_requirement_job(item_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Requirement item not found.")
 
-    status = job["status"]
-    if status in {"received", "processing"}:
-        response.status_code = 202
+    internal_status = str(job["status"])
+    is_waiting = internal_status in {"received", "processing"}
 
     result = job.get("result")
     result_payload = (
         RequirementParseResponse.model_validate(result) if result is not None else None
     )
 
-    return RequirementParseResultQueryResponse(
-        id=job["id"],
-        name=job["name"],
-        status=status,
-        createdAt=job["createdAt"],
-        result=result_payload,
-        error=job.get("error"),
+    return ResponseModel(
+        code=200,
+        msg="收到后端响应",
+        data=RequirementParseResultQueryResponse(
+            waiting=is_waiting,
+            id=job["id"],
+            name=job["name"],
+            status=_STATUS_TO_API.get(internal_status, "已失败"),
+            createdAt=job["createdAt"],
+            result=result_payload,
+            error=job.get("error"),
+        ),
     )
 
 
