@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Response
-
+from ..schemas import ResponseModel
 from src.service.requirement_jobs import (
     create_requirement_job,
     get_requirement_job,
@@ -21,11 +21,11 @@ from .schemas import (
 router = APIRouter()
 
 
-@router.post("/parse", response_model=RequirementParseRecived)
+@router.post("/parse", response_model=ResponseModel[RequirementParseRecived])
 async def submit_requirement_parse(
     background_tasks: BackgroundTasks,
     payload: RequirementParseRequest,
-) -> RequirementParseRecived:
+) -> ResponseModel:
     item_id = uuid4().hex
     created_at = datetime.now(timezone.utc).isoformat()
     requirement_data = payload.model_dump(mode="json")
@@ -42,12 +42,17 @@ async def submit_requirement_parse(
         item_id,
     )
 
-    return RequirementParseRecived(
-        id=item_id,
-        name=payload.name,
-        status="运行中",
-        createdAt=created_at,
+    return ResponseModel(
+        code=200,
+        msg="成功提交需求解析任务",
+        data= RequirementParseRecived(
+            id=item_id,
+            name=payload.name,
+            status="运行中",
+            createdAt=created_at,
+        )
     )
+
 
 
 @router.get("/{item_id}/result", response_model=RequirementParseResultQueryResponse)
