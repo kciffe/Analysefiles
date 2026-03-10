@@ -1,7 +1,9 @@
-from datetime import date
+﻿from datetime import date
 from typing import List, Literal
 
 from pydantic import BaseModel
+
+RequirementStatus = Literal["received", "processing", "success", "failed"]
 
 
 class RequirementParseRequest(BaseModel):
@@ -26,6 +28,13 @@ class ReportBlockTable(BaseModel):
     title: str
     columns: List[str]
     rows: List[List[str]]
+
+
+class RequirementParseRecived(BaseModel):
+    id: str
+    name: str
+    status: RequirementStatus
+    createdAt: str
 
 
 class ReportSchema(BaseModel):
