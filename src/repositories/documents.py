@@ -154,18 +154,17 @@ def search_documents_by_keywords(
 
     normalized_keywords = [kw.strip() for kw in (keywords or []) if kw and kw.strip()]
     if normalized_keywords:
-        keyword_conditions = []
+        # Stricter retrieval: every input keyword must be matched in at least one field.
         for keyword in normalized_keywords:
             wildcard = f"%{keyword}%"
-            keyword_conditions.extend(
-                [
+            stmt = stmt.where(
+                or_(
                     FileMetadata.title.ilike(wildcard),
                     FileMetadata.abstract.ilike(wildcard),
                     cast(FileMetadata.keywords, Text).ilike(wildcard),
                     DocParsed.full_text.ilike(wildcard),
-                ]
+                )
             )
-        stmt = stmt.where(or_(*keyword_conditions))
 
     normalized_types = [doc_type for doc_type in (doc_types or []) if doc_type]
     if normalized_types:
