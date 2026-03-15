@@ -1,149 +1,110 @@
 from __future__ import annotations
 
-import json
-import os
-import re
-from pathlib import Path
-from textwrap import dedent
 from typing import Any
 
-from pydantic import BaseModel
-from openai import pydantic_function_tools
+from src.db import get_session
+from src.repositories.documents import RetrievedDocument, search_documents_by_keywords
+from src.repositories.labels import select_labels_by_filters
+from src.service.parse import analyze_with_openclaw
 
-from openai import OpenAI
 
-_SYSTEM_PROMPT = dedent(
-    """
-    You are a requirement analysis assistant. Convert the requirement object to a structured report JSON.
-    Output constraints:
-    1. Only output valid JSON.
-    2. Do not wrap with markdown code fences.
-    3. Use this exact schema:
-    {
-        "success": true,
+def analyze_requirement(requirement_data: dict[str, Any]) -> dict[str, Any]:
+    keywords = requirement_data.get("keywords") or []
+    doc_types = requirement_data.get("docTypes") or []
+
+    with get_session() as session:
+        documents = search_documents_by_keywords(
+            session,
+            keywords=keywords,
+            doc_types=doc_types,
+            start_date=requirement_data.get("startDate"),
+            end_date=requirement_data.get("endDate"),
+            limit=5,
+        )
+
+        label_keyword = keywords[0] if keywords else None
+        related_labels = select_labels_by_filters(session, keyword=label_keyword)
+
+    if not documents:
+        return _empty_report(requirement_data)
+
+    analyses = [_analyze_document(document) for document in documents]
+
+    report = {
+        "title": f"{requirement_data.get('name', '需求')}分析报告",
+        "summary": f"共检索到 {len(documents)} 篇文献并完成 OpenClaw 分析。",
+        "blocks": [
+            {
+                "id": "block_1",
+                "type": "text",
+                "title": "需求概述",
+                "content": requirement_data.get("detail", ""),
+            },
+            {
+                "id": "block_2",
+                "type": "table",
+                "title": "文献分析结果",
+                "columns": ["文档名", "标题", "标签", "关键词"],
+                "rows": [
+                    [
+                        item["name"],
+                        item["title"],
+                        item["labels"],
+                        "、".join(item["keywords"]),
+                    ]
+                    for item in analyses
+                ],
+            },
+        ],
+    }
+
+    if related_labels:
+        report["blocks"].append(
+            {
+                "id": "block_3",
+                "type": "text",
+                "title": "相关标签建议",
+                "content": "；".join(
+                    f"{label.top_label}: {', '.join(label.sub_label)}"
+                    for label in related_labels
+                ),
+            }
+        )
+
+    return {
+        "success": True,
+        "report": report,
+    }
+
+
+def _analyze_document(document: RetrievedDocument) -> dict[str, Any]:
+    analysis_result = analyze_with_openclaw(
+        file_bytes=document.full_text.encode("utf-8"),
+        file_name=document.name,
+        doc_type=document.doc_type or "unknown",
+    )
+
+    return {
+        "name": document.name,
+        "title": document.title,
+        "labels": str(analysis_result.get("labels") or "未标注"),
+        "keywords": document.keywords,
+    }
+
+
+def _empty_report(requirement_data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "success": True,
         "report": {
-            "title": "...",
-            "summary": "...",
+            "title": f"{requirement_data.get('name', '需求')}分析报告",
+            "summary": "未检索到匹配文献。",
             "blocks": [
                 {
                     "id": "block_1",
                     "type": "text",
-                    "title": "...",
-                    "content": "..."
-                },
-                {
-                    "id": "block_2",
-                    "type": "table",
-                    "title": "...",
-                    "columns": ["..."],
-                    "rows": [["..."]]
+                    "title": "结果说明",
+                    "content": "根据当前关键词、时间范围与文档类型未找到匹配文献，请调整筛选条件后重试。",
                 }
-            ]
-        }
+            ],
+        },
     }
-    """
-).strip()
-
-# Register Pydantic tool models here when adding new callable tools.
-_TOOL_MODELS: tuple[type[BaseModel], ...] = ()
-
-
-def analyze_requirement(requirement_data: dict) -> dict:
-    base_url, api_key, model = _resolve_openclaw_config()
-
-    client = OpenAI(base_url=base_url, api_key=api_key)
-    request_kwargs: dict[str, Any] = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": (
-                    "Analyze this requirement object and return JSON only:\n"
-                    + json.dumps(requirement_data, ensure_ascii=False)
-                ),
-            },
-        ],
-    }
-    tools = _build_function_tools()
-    if tools:
-        request_kwargs["tools"] = tools
-        request_kwargs["tool_choice"] = "auto"
-
-    completions = client.chat.completions.create(**request_kwargs)
-
-    content = completions.choices[0].message.content or ""
-    normalized = _clean_llm_output(content)
-
-    result = json.loads(normalized)
-    if not isinstance(result, dict):
-        raise ValueError("OpenClaw output is not a JSON object.")
-
-    return result
-
-
-def _build_function_tools() -> list[dict[str, Any]]:
-    if not _TOOL_MODELS:
-        return []
-    return pydantic_function_tools(_TOOL_MODELS)
-
-
-def _resolve_openclaw_config() -> tuple[str, str, str]:
-    env_base_url = os.getenv("OPENCLAW_BASE_URL")
-    env_api_key = os.getenv("OPENCLAW_API_KEY")
-    env_model = os.getenv("OPENCLAW_MODEL")
-
-    if env_base_url and env_api_key and env_model:
-        return env_base_url, env_api_key, env_model
-
-    cfg = _load_openclaw_json_defaults()
-    base_url = env_base_url or cfg.get("base_url") or "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    api_key = env_api_key or cfg.get("api_key") or ""
-    model = env_model or cfg.get("model") or "qwen-max"
-
-    if not api_key:
-        raise ValueError(
-            "Missing OPENCLAW_API_KEY. Set OPENCLAW_BASE_URL/OPENCLAW_API_KEY/OPENCLAW_MODEL "
-            "or configure ~/.openclaw/openclaw.json."
-        )
-
-    return base_url, api_key, model
-
-
-def _load_openclaw_json_defaults() -> dict[str, str]:
-    config_path = Path.home() / ".openclaw" / "openclaw.json"
-    if not config_path.exists():
-        return {}
-
-    try:
-        data = json.loads(config_path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-
-    providers = data.get("models", {}).get("providers", {})
-    primary = (
-        data.get("agents", {})
-        .get("defaults", {})
-        .get("model", {})
-        .get("primary", "")
-    )
-    provider_name, _, model_id = primary.partition("/")
-    provider_cfg = providers.get(provider_name, {}) if provider_name else {}
-
-    api_key = provider_cfg.get("apiKey") or ""
-    if api_key == "qwen-oauth":
-        api_key = ""
-
-    return {
-        "base_url": provider_cfg.get("baseUrl") or "",
-        "api_key": api_key,
-        "model": model_id or "",
-    }
-
-
-def _clean_llm_output(content: str) -> str:
-    cleaned = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
-    if cleaned.startswith("```"):
-        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-    return cleaned.strip()
