@@ -5,6 +5,10 @@ import os
 import re
 from pathlib import Path
 from textwrap import dedent
+from typing import Any
+
+from pydantic import BaseModel
+from openai import pydantic_function_tools
 
 from openai import OpenAI
 
@@ -40,15 +44,17 @@ _SYSTEM_PROMPT = dedent(
     """
 ).strip()
 
+# Register Pydantic tool models here when adding new callable tools.
+_TOOL_MODELS: tuple[type[BaseModel], ...] = ()
+
 
 def analyze_requirement(requirement_data: dict) -> dict:
     base_url, api_key, model = _resolve_openclaw_config()
 
     client = OpenAI(base_url=base_url, api_key=api_key)
-
-    completions = client.chat.completions.create(
-        model=model,
-        messages=[
+    request_kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": [
             {"role": "system", "content": _SYSTEM_PROMPT},
             {
                 "role": "user",
@@ -58,7 +64,13 @@ def analyze_requirement(requirement_data: dict) -> dict:
                 ),
             },
         ],
-    )
+    }
+    tools = _build_function_tools()
+    if tools:
+        request_kwargs["tools"] = tools
+        request_kwargs["tool_choice"] = "auto"
+
+    completions = client.chat.completions.create(**request_kwargs)
 
     content = completions.choices[0].message.content or ""
     normalized = _clean_llm_output(content)
@@ -68,6 +80,12 @@ def analyze_requirement(requirement_data: dict) -> dict:
         raise ValueError("OpenClaw output is not a JSON object.")
 
     return result
+
+
+def _build_function_tools() -> list[dict[str, Any]]:
+    if not _TOOL_MODELS:
+        return []
+    return pydantic_function_tools(_TOOL_MODELS)
 
 
 def _resolve_openclaw_config() -> tuple[str, str, str]:
