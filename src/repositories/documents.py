@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Mapping
 
-from sqlalchemy import DateTime, Integer, String, Text, func, select
+from sqlalchemy import DateTime, Integer, String, Text, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
@@ -68,6 +68,17 @@ class StoredDocument:
     doc_parsed_id: int
 
 
+@dataclass(frozen=True)
+class RetrievedDocument:
+    id: int
+    name: str
+    path: str
+    doc_type: str | None
+    title: str
+    keywords: list[str]
+    full_text: str
+
+
 def store_parsed_document(
     session: Session,
     *,
@@ -123,6 +134,70 @@ def store_parsed_document(
         file_metadata_id=ids.file_metadata_id,
         doc_parsed_id=ids.doc_parsed_id,
     )
+
+
+def search_documents_by_keywords(
+    session: Session,
+    *,
+    keywords: list[str] | None = None,
+    doc_types: list[str] | None = None,
+    start_date: date | str | None = None,
+    end_date: date | str | None = None,
+    limit: int = 10,
+) -> list[RetrievedDocument]:
+    stmt = (
+        select(FileResource, FileMetadata, DocParsed)
+        .join(FileMetadata, FileMetadata.file_id == FileResource.id)
+        .join(DocParsed, DocParsed.doc_id == FileResource.id)
+        .order_by(FileResource.created_time.desc())
+    )
+
+    normalized_keywords = [kw.strip() for kw in (keywords or []) if kw and kw.strip()]
+    if normalized_keywords:
+        keyword_conditions = []
+        for keyword in normalized_keywords:
+            wildcard = f"%{keyword}%"
+            keyword_conditions.extend(
+                [
+                    FileMetadata.title.ilike(wildcard),
+                    FileMetadata.abstract.ilike(wildcard),
+                    cast(FileMetadata.keywords, Text).ilike(wildcard),
+                    DocParsed.full_text.ilike(wildcard),
+                ]
+            )
+        stmt = stmt.where(or_(*keyword_conditions))
+
+    normalized_types = [doc_type for doc_type in (doc_types or []) if doc_type]
+    if normalized_types:
+        stmt = stmt.where(FileResource.type.in_(normalized_types))
+
+    normalized_start_date = _normalize_date(start_date)
+    normalized_end_date = _normalize_date(end_date)
+
+    if normalized_start_date is not None:
+        stmt = stmt.where(
+            FileMetadata.publish_year
+            >= datetime.combine(normalized_start_date, datetime.min.time())
+        )
+    if normalized_end_date is not None:
+        stmt = stmt.where(
+            FileMetadata.publish_year
+            <= datetime.combine(normalized_end_date, datetime.max.time())
+        )
+
+    rows = session.execute(stmt.limit(limit)).all()
+    return [
+        RetrievedDocument(
+            id=file_resource.id,
+            name=file_resource.name,
+            path=file_resource.path,
+            doc_type=file_resource.type,
+            title=file_metadata.title,
+            keywords=list(file_metadata.keywords or []),
+            full_text=doc_parsed.full_text,
+        )
+        for file_resource, file_metadata, doc_parsed in rows
+    ]
 
 
 _DOCUMENTS_WRITE_LOCK_ID = 814723
@@ -215,6 +290,19 @@ def _normalize_keywords(value: Any) -> list[str]:
     if isinstance(value, str):
         return [value]
     return [str(value)]
+
+
+def _normalize_date(value: date | str | None) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
 
 
 def _normalize_publish_year(value: Any) -> datetime | None:

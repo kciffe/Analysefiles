@@ -7,85 +7,127 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Any
 
-from pydantic import BaseModel
-from openai import pydantic_function_tools
-
 from openai import OpenAI
+
+from src.db import get_session
+from src.repositories.documents import RetrievedDocument, search_documents_by_keywords
 
 _SYSTEM_PROMPT = dedent(
     """
-    You are a requirement analysis assistant. Convert the requirement object to a structured report JSON.
-    Output constraints:
-    1. Only output valid JSON.
-    2. Do not wrap with markdown code fences.
-    3. Use this exact schema:
+    你是一个需求分析助手。
+    你会收到：
+    1) 用户的需求信息
+    2) 数据库检索得到的文档列表（标题、关键词、正文片段）
+
+    你的任务：
+    - 基于需求信息，分析这些文档与需求的相关性和支撑结论。
+    - 输出“类似 ChatGPT 的 blocks 报告结构”。
+
+    输出约束：
+    1. 只输出合法 JSON，不要 markdown 代码块。
+    2. JSON 必须严格符合以下结构：
     {
-        "success": true,
-        "report": {
+      "success": true,
+      "report": {
+        "title": "...",
+        "summary": "...",
+        "blocks": [
+          {
+            "id": "block_1",
+            "type": "text",
             "title": "...",
-            "summary": "...",
-            "blocks": [
-                {
-                    "id": "block_1",
-                    "type": "text",
-                    "title": "...",
-                    "content": "..."
-                },
-                {
-                    "id": "block_2",
-                    "type": "table",
-                    "title": "...",
-                    "columns": ["..."],
-                    "rows": [["..."]]
-                }
-            ]
-        }
+            "content": "..."
+          },
+          {
+            "id": "block_2",
+            "type": "table",
+            "title": "...",
+            "columns": ["..."],
+            "rows": [["..."]]
+          }
+        ]
+      }
     }
     """
 ).strip()
 
-# Register Pydantic tool models here when adding new callable tools.
-_TOOL_MODELS: tuple[type[BaseModel], ...] = ()
+
+def analyze_requirement(requirement_data: dict[str, Any]) -> dict[str, Any]:
+    keywords = requirement_data.get("keywords") or []
+    doc_types = requirement_data.get("docTypes") or []
+
+    with get_session() as session:
+        documents = search_documents_by_keywords(
+            session,
+            keywords=keywords,
+            doc_types=doc_types,
+            start_date=requirement_data.get("startDate"),
+            end_date=requirement_data.get("endDate"),
+            limit=8,
+        )
+
+    if not documents:
+        return _empty_report(requirement_data)
+
+    return _analyze_with_openclaw(requirement_data, documents)
 
 
-def analyze_requirement(requirement_data: dict) -> dict:
+def _analyze_with_openclaw(
+    requirement_data: dict[str, Any], documents: list[RetrievedDocument]
+) -> dict[str, Any]:
     base_url, api_key, model = _resolve_openclaw_config()
-
     client = OpenAI(base_url=base_url, api_key=api_key)
-    request_kwargs: dict[str, Any] = {
-        "model": model,
-        "messages": [
+
+    payload = {
+        "requirement": {
+            "name": requirement_data.get("name"),
+            "keywords": requirement_data.get("keywords") or [],
+            "docTypes": requirement_data.get("docTypes") or [],
+            "startDate": requirement_data.get("startDate"),
+            "endDate": requirement_data.get("endDate"),
+            "detail": requirement_data.get("detail") or "",
+        },
+        "documents": [
+            {
+                "id": doc.id,
+                "name": doc.name,
+                "title": doc.title,
+                "docType": doc.doc_type,
+                "keywords": doc.keywords,
+                "contentSnippet": _doc_snippet(doc.full_text),
+            }
+            for doc in documents
+        ],
+    }
+
+    completion = client.chat.completions.create(
+        model=model,
+        messages=[
             {"role": "system", "content": _SYSTEM_PROMPT},
             {
                 "role": "user",
                 "content": (
-                    "Analyze this requirement object and return JSON only:\n"
-                    + json.dumps(requirement_data, ensure_ascii=False)
+                    "请根据以下需求和候选文档输出最终需求分析报告 JSON：\n"
+                    + json.dumps(payload, ensure_ascii=False)
                 ),
             },
         ],
-    }
-    tools = _build_function_tools()
-    if tools:
-        request_kwargs["tools"] = tools
-        request_kwargs["tool_choice"] = "auto"
+    )
 
-    completions = client.chat.completions.create(**request_kwargs)
-
-    content = completions.choices[0].message.content or ""
+    content = completion.choices[0].message.content or ""
     normalized = _clean_llm_output(content)
 
     result = json.loads(normalized)
     if not isinstance(result, dict):
         raise ValueError("OpenClaw output is not a JSON object.")
-
     return result
 
 
-def _build_function_tools() -> list[dict[str, Any]]:
-    if not _TOOL_MODELS:
-        return []
-    return pydantic_function_tools(_TOOL_MODELS)
+def _doc_snippet(full_text: str, max_len: int = 2500) -> str:
+    text = full_text.strip()
+    if len(text) <= max_len:
+        return text
+    return text[:max_len] + "..."
 
 
 def _resolve_openclaw_config() -> tuple[str, str, str]:
@@ -147,3 +189,21 @@ def _clean_llm_output(content: str) -> str:
         cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
         cleaned = re.sub(r"\s*```$", "", cleaned)
     return cleaned.strip()
+
+
+def _empty_report(requirement_data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "success": True,
+        "report": {
+            "title": f"{requirement_data.get('name', '需求')}分析报告",
+            "summary": "未检索到匹配文献。",
+            "blocks": [
+                {
+                    "id": "block_1",
+                    "type": "text",
+                    "title": "结果说明",
+                    "content": "根据当前关键词、时间范围与文档类型未找到匹配文献，请调整筛选条件后重试。",
+                }
+            ],
+        },
+    }

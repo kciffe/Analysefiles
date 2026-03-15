@@ -54,6 +54,22 @@ You can and only can output labels directly. Don't output anything else.
 中文
 """
 
+
+
+def analyze_with_openclaw(
+    file_bytes: bytes, file_name: str, doc_type: str
+) -> dict[str, Any]:
+    parse_service = ParseService()
+    result = parse_service.run(
+        file_bytes=file_bytes, file_name=file_name, doc_type=doc_type
+    )
+    if hasattr(result, "model_dump"):
+        return result.model_dump()
+    if isinstance(result, dict):
+        return dict(result)
+    raise ValueError("Parse service returned unsupported result type.")
+
+
 class ParseService(BaseModel):
 
     openai_client:OpenAI = OpenAI(base_url="http://localhost:11434/v1", api_key="<EMPTY>")
