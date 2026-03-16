@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import os
@@ -63,7 +63,7 @@ def analyze_requirement(requirement_data: dict[str, Any]) -> dict[str, Any]:
             doc_types=doc_types,
             start_date=requirement_data.get("startDate"),
             end_date=requirement_data.get("endDate"),
-            limit=8,
+            limit=128,
         )
 
     if not documents:

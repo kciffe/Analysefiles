@@ -136,6 +136,7 @@ def store_parsed_document(
     )
 
 
+
 def search_documents_by_keywords(
     session: Session,
     *,
@@ -154,7 +155,6 @@ def search_documents_by_keywords(
 
     normalized_keywords = [kw.strip() for kw in (keywords or []) if kw and kw.strip()]
     if normalized_keywords:
-        # Stricter retrieval: every input keyword must be matched in at least one field.
         for keyword in normalized_keywords:
             wildcard = f"%{keyword}%"
             stmt = stmt.where(

@@ -24,33 +24,32 @@ class ParseResult(BaseModel):
     
     metadata: dict[str, Any] | None = None
 
-system_prompt = """You are a paper annotator.
+system_prompt = """你是一名论文标注员。
 
-# Task Description
-Give you a paper which contains a title, abstract and introduction,
-you will label the paper with the available labels.
+# 任务描述
+给你一篇论文，其中包含标题（title）、摘要（abstract）和引言（introduction），
+你需要根据提供的标签列表，为该论文选择合适的标签。
 
-# Available labels
+# 可用标签
 
-## Label format
+## 标签格式
 -----
-main: first label. Generally it's a wide type.
-child: sub-labels under the main label. 
+main：一级标签，通常表示较大的领域类别。
+child：二级标签，属于 main 标签下的子类别。
 -----
 
-## Labels
+## 标签列表
 {available_labels}
 
-# Annotation Principle
-The label is always like `Computer Science - Deep Learning - CV`.
-As you can see, it always consists of three labels. The relationship
-of these three labels is detailed progressively. The labels are connected
-by `-`.
+# 标注原则
+标签的形式始终为 `Computer Science - Deep Learning - CV` 这种结构。
+如你所见，每个标签由三个层级组成，并且层级关系逐级细化。
+这三个标签之间使用 `-` 进行连接。
 
-# Output format
-You can and only can output labels directly. Don't output anything else.
+# 输出格式
+你只能直接输出标签，不要输出任何其他内容。
 
-# Work language
+# 工作语言
 中文
 """
 
@@ -123,8 +122,6 @@ class ParseService(BaseModel):
             ]
         )
 
-        # TODO: add checks for llm output in the future.
-        
         response = completions.choices[0].message.content
         if "qwen3" in self.model:
             import re
