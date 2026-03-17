@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Mapping
 
-from sqlalchemy import DateTime, Integer, String, Text, cast, func, or_,case, select
+from sqlalchemy import DateTime, Integer, String, Text, cast, func,case, select,literal
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
@@ -66,7 +66,7 @@ class AgentLogs(Base):
     id : Mapped[int] = mapped_column(Integer, primary_key=True)
     task_name:Mapped[str] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(16))
-    messaage: Mapped[str] = mapped_column(Text)
+    message: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     
 @dataclass(frozen=True)
@@ -148,7 +148,7 @@ def store_parsed_document(
 def search_documents_by_keywords(
     session: Session,
     *,
-    keywords: list[str] ,
+    keywords: list[str]| None = None ,
     doc_types: list[str] | None = None,
     start_date: date | str | None = None,
     end_date: date | str | None = None,
@@ -162,12 +162,11 @@ def search_documents_by_keywords(
 
     #关键词匹配
     normalized_keywords=[]
-    for keyword in keywords:
+    for keyword in (keywords or []):
         if keyword and keyword.strip():
             normalized_keywords.append(keyword.strip())
-
+    score=literal(0)
     if normalized_keywords:
-        score=0
         for keyword in normalized_keywords:
             wildcard = f"%{keyword}%"
             score+=(
@@ -175,12 +174,10 @@ def search_documents_by_keywords(
                 case((cast(FileMetadata.keywords,Text).ilike(wildcard),2),else_=0)+
                 case((FileMetadata.abstract.ilike(wildcard),1),else_=0)
             )
-        score=score.label("score")
-        query_all_tables=(
-            query_all_tables.add_columns(score)
-            .where(score>0)
-            .order_by(score.desc())
-        )
+    score=score.label("score")
+    query_all_tables=query_all_tables.add_columns(score)
+    if normalized_keywords:
+        query_all_tables=query_all_tables.where(score>0).order_by(score.desc(),FileMetadata.publish_year.desc())
     else:
         query_all_tables=query_all_tables.order_by(FileMetadata.publish_year.desc())
 
