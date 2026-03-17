@@ -15,5 +15,6 @@ uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 Development mode
 ```
 uvicorn src.api.main:app --reload
+uv run uvicorn src.api.main:app --reload
 ```# deepresearch
 
