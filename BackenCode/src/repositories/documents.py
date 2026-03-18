@@ -84,6 +84,7 @@ class RetrievedDocument:
     abstract: str | None
     publish_year: date | None
     keywords: list[str]
+    struct_info: dict[str, Any] | None
 
 
 def store_parsed_document(
@@ -219,6 +220,7 @@ def search_documents_by_keywords(
             abstract=file_metadata.abstract,
             publish_year=file_metadata.publish_year,
             keywords=file_metadata.keywords,
+            struct_info=doc_parsed.structure_info,
             # score=_score,
         )
         for file_resource, file_metadata, doc_parsed, _score in rows
