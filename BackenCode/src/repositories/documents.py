@@ -75,16 +75,15 @@ class StoredDocument:
     file_metadata_id: int
     doc_parsed_id: int
 
-
+#检索工具返回格式：题目、作者、摘要、发布时间、论文目录结构 、关键词
 @dataclass(frozen=True)
 class RetrievedDocument:
     id: int
-    name: str
-    path: str
-    doc_type: str | None
     title: str
+    authors:str | None
+    abstract: str | None
+    publish_year: date | None
     keywords: list[str]
-    full_text: str
 
 
 def store_parsed_document(
@@ -214,13 +213,13 @@ def search_documents_by_keywords(
     # ↓ return 返回
     return [
         RetrievedDocument(
-            id=file_resource.id,
-            name=file_resource.name,
-            path=file_resource.path,
-            doc_type=file_resource.type,
+            id=file_metadata.id,
             title=file_metadata.title,
-            keywords=list(file_metadata.keywords or []),
-            full_text=doc_parsed.full_text,
+            authors=file_metadata.authors,
+            abstract=file_metadata.abstract,
+            publish_year=file_metadata.publish_year,
+            keywords=file_metadata.keywords,
+            # score=_score,
         )
         for file_resource, file_metadata, doc_parsed, _score in rows
     ]

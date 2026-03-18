@@ -7,8 +7,8 @@ from ..repositories.documents import search_documents_by_keywords
 from ..db import get_session
 
 #TODO: 规范search_documents输出结果为字符串
-#description丰富
-#检索工具返回格式：题目、作者、摘要、发布时间、论文目录结构
+#description丰富 ✅
+#检索工具返回格式：题目、作者、摘要、发布时间、论文目录结构 、关键词✅
 #中间工具调用过程持久化
 #langgraph实现控制循环
 def search_documents(
