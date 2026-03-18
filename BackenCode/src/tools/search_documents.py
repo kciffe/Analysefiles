@@ -61,80 +61,8 @@ class SearchDocumentsRequest(BaseModel):
     limit: int = Field(128, description="返回的文档数量上限")
 
 
-search_docs = pydantic_function_tool(
+search_documents_tool = pydantic_function_tool(
     SearchDocumentsRequest,
     name="search_docs",
     description="搜索文档工具，依据需求描述，返回满足条件的文档信息",
 )
-
-print(search_docs)
-
-tool_kits = {
-    "search_docs": search_documents,
-}
-
-client = OpenAI(
-    base_url="https://api.deepseek.com",
-    api_key=os.getenv("DEEPSEEK_API_KEY"),
-)
-model = "deepseek-chat"
-
-messages = [
-            {
-                "role": "system",
-                "content": "You are a helpful assistant. 关键词跟Agent有关的只有2个 —— LLM Agent和Tool use",
-            },
-            {
-                "role": "user",
-                "content": "随便搜两篇arXiv预印本文档出来, 跟Agent有关就行。",
-            },
-        ]
-
-
-terminate = False
-while not terminate:
-    completion = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        tools=[search_docs]
-    )
-
-
-    print(completion.choices[0])
-    if completion.choices[0].finish_reason == "tool_calls":
-        tool_call = completion.choices[0].message.tool_calls[0]
-        messages.append(
-            {
-                "role": "assistant",
-                "content": completion.choices[0].message.content,
-                "tool_calls": [
-                    {
-                        "id": tool_call.id,
-                        "function": tool_call.function,
-                        "type": "function",
-                    }
-                ]
-            }
-        )
-        print(completion.choices[0])
-        tool_name = tool_call.function.name
-        args = json.loads(tool_call.function.arguments)
-        response = tool_kits[tool_name](**args)
-
-        messages.append(
-            {
-                "role": "tool",
-                "content": response,
-                "tool_call_id": tool_call.id,
-                "function": {
-                    "name": tool_name,
-                    "arguments": json.dumps(args, ensure_ascii=False),
-                },
-            }
-        )
-
-        print(f"[tool result] {response}")
-
-    else:
-        print(f"[final answer] {completion.choices[0].message.content}")
-        terminate = True
