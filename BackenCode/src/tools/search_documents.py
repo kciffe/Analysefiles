@@ -33,16 +33,16 @@ def search_documents(
 
 class SearchDocumentsRequest(BaseModel):
     keywords: list[str] | None = Field(None, description="搜索的关键词")
-    doc_types: list[str] | None = Field(Literal["LLM Agent", "Tool use"], description="文档类型")
-    start_date: str | None = Field(None, description="开始时间")
-    end_date: str | None = Field(None, description="结束时间")
-    limit: int = Field(128, description="返回的文档数量")
+    doc_types: list[str] | None = Field(Literal["LLM Agent", "Tool use"], description="文档类型,如ACL、arxiv等")
+    start_date: str | None = Field(None, description="文档发布的最早时间")
+    end_date: str | None = Field(None, description="文档发布的最晚时间")
+    limit: int = Field(128, description="返回的文档数量上限")
 
 
 search_docs = pydantic_function_tool(
     SearchDocumentsRequest,
     name="search_docs",
-    description="搜索文档",
+    description="搜索文档工具，依据需求描述，返回满足条件的文档信息",
 )
 
 print(search_docs)

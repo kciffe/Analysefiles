@@ -228,13 +228,36 @@ def search_documents_by_keywords(
 #文档写入专用锁
 _DOCUMENTS_WRITE_LOCK_ID = 100100
 
+def store_agent_logs(
+        session: Session,
+        *,
+        task_name:str,
+        status:str,
+        message:str
+)-> AgentIds:
+    agent_log_id = _next_agent_log_id(session)
+    created_at = datetime.utcnow()
+    session.execute(select(func.pg_advisory_xact_lock(_AGENTLOGS_WTRITE_LOCK_ID)))
+    agent_logs=AgentLogs(
+        id=agent_log_id,
+        task_name=task_name,
+        message=message,
+        status=status,
+        created_at=created_at,
+    )
+    session.add(agent_logs)
+    return AgentIds(agent_log_id=agent_log_id)
+
+
+#agent日志写入锁
+_AGENTLOGS_WTRITE_LOCK_ID = 100101
+
 
 @dataclass(frozen=True)
 class DocumentIds:
     file_resource_id: int
     file_metadata_id: int
     doc_parsed_id: int
-
 
 def _allocate_document_ids(session: Session) -> DocumentIds:
     file_resource_id = _next_file_resource_id(session)
@@ -245,6 +268,10 @@ def _allocate_document_ids(session: Session) -> DocumentIds:
         file_metadata_id=file_metadata_id,
         doc_parsed_id=doc_parsed_id,
     )
+
+@dataclass(frozen=True)
+class AgentIds:
+    agent_log_id: int
 
 
 def _next_file_resource_id(session: Session) -> int:
@@ -258,6 +285,8 @@ def _next_file_metadata_id(session: Session) -> int:
 def _next_doc_parsed_id(session: Session) -> int:
     return _select_next_id(session, DocParsed.id)
 
+def _next_agent_log_id(session: Session) -> int:
+    return _select_next_id(session, AgentLogs.id)
 
 def _select_next_id(session: Session, column) -> int:
     stmt = select(func.coalesce(func.max(column), 0) + 1)
@@ -347,3 +376,4 @@ def _normalize_publish_year(value: Any) -> datetime | None:
             if 1 <= year <= 9999:
                 return datetime(year, 1, 1)
     return None
+
