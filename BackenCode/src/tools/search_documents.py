@@ -63,6 +63,6 @@ class SearchDocumentsRequest(BaseModel):
 
 search_documents_tool = pydantic_function_tool(
     SearchDocumentsRequest,
-    name="search_docs",
+    name="search_documents",
     description="搜索文档工具，依据需求描述，返回满足条件的文档信息",
 )
