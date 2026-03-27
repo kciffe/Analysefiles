@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
+from src.agent.base import Agent
 
 from src.service.requirement_jobs import (
     create_requirement_job,
@@ -39,6 +40,7 @@ async def submit_requirement_parse(
     created_at = datetime.now(timezone.utc).isoformat()
     requirement_data = payload.model_dump(mode="json")
 
+    # 作用：创建任务记录，初始状态为 "received"，并将任务数据存储在内存中，以便后续处理函数访问和更新。
     create_requirement_job(
         item_id=item_id,
         name=payload.name,
@@ -46,6 +48,20 @@ async def submit_requirement_parse(
         requirement_data=requirement_data,
     )
 
+    flag = False
+    agent = Agent()
+    def generator_():
+        if not flag:
+            yield f"data: {ResponseModel(code=200, msg='成功提交需求解析任务', data=RequirementParseRecived(id=item_id, name=payload.name, status='已发布', createdAt=created_at)).model_dump_json()}\n\n"
+            flag = True
+        else:
+            yield agent.run(payload)
+    
+
+    return StreamingResponse(generator_(), media_type="text/event-stream")
+
+    #TODO:
+    #做一个迭代器，满足SSE格式，返回的类型为stringmingresponse
     background_tasks.add_task(_run_requirement_analysis, item_id)
 
     return ResponseModel(
