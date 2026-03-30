@@ -41,7 +41,18 @@ async def submit_requirement_parse(
     requirement_data = payload.model_dump(mode="json")
 
     # ✅ 调度 worker
-    background_tasks.add_task(run_requirement_job, item_id)
+    background_tasks.add_task(run_requirement_job, item_id, requirement_data)
+
+    return ResponseModel(
+        code=200,
+        msg="成功提交需求解析任务",
+        data=RequirementParseRecived(
+            id=item_id,
+            name=payload.name,
+            status="已发布",
+            createdAt=created_at,
+        ),
+    )
 
     # flag = False
     # agent = Agent()
@@ -59,16 +70,7 @@ async def submit_requirement_parse(
     #做一个迭代器，满足SSE格式，返回的类型为stringmingresponse
     # background_tasks.add_task(_run_requirement_analysis, item_id)
 
-    return ResponseModel(
-        code=200,
-        msg="成功提交需求解析任务",
-        data=RequirementParseRecived(
-            id=item_id,
-            name=payload.name,
-            status="已发布",
-            createdAt=created_at,
-        ),
-    )
+
 
 
 @router.get(

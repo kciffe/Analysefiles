@@ -1,9 +1,7 @@
-import os
 from typing import Literal,Any
 import json
 from datetime import date, datetime
 from openai import pydantic_function_tool, OpenAI
-from pydantic import BaseModel, Field
 from ..repositories.documents import search_documents_by_keywords
 from ..db import get_session
 
@@ -48,16 +46,10 @@ def _serialize_document(item: Any) -> dict:
         "structure_info": item.structure_info or {},
     }
 
-class SearchDocumentsRequest(BaseModel):
-    keywords: list[str] | None = Field(None, description="搜索的关键词")
-    doc_types: list[str] | None = Field(None, description="文档类型,如ACL、arxiv等")
-    start_date: str | None = Field(None, description="文档发布的最早时间")
-    end_date: str | None = Field(None, description="文档发布的最晚时间")
-    limit: int = Field(128, description="返回的文档数量上限")
 
 
-search_documents_tool = pydantic_function_tool(
-    SearchDocumentsRequest,
-    name="search_documents",
-    description="搜索文档工具，依据需求描述，返回满足条件的文档信息",
-)
+# search_documents_tool = pydantic_function_tool(
+#     SearchDocumentsRequest,
+#     name="search_documents",
+#     description="搜索文档工具，依据需求描述，返回满足条件的文档信息",
+# )

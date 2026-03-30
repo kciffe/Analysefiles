@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from typing import List
 from copy import deepcopy
 from threading import Lock
 from typing import Any
@@ -40,12 +40,11 @@ def set_requirement_job_processing(item_id: str) -> None:
             job["status"] = "processing"
 
 
-def set_requirement_job_success(item_id: str, *, result: dict[str, Any]) -> None:
+def set_requirement_job_success(item_id: str,) -> None:
     with _jobs_lock:
         job = _jobs.get(item_id)
         if job is not None:
             job["status"] = "success"
-            job["result"] = deepcopy(result)
             job["error"] = None
 
 

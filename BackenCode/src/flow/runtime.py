@@ -1,1 +1,0 @@
-# 封装 graph 的调用入口，给 service 或 api 用。
