@@ -1,7 +1,12 @@
 #定义 LangGraph 的共享状态
-from typing import TypeDict,Annotated
+from typing import TypedDict,Annotated
 from langgraph.graph.message import add_messages
-class WorkFlowState(TypeDict):
+from ..repositories.documents import RetrievedDocument
+from .schema.parse_type import EvidenceSectionPair
+#------------
+# PARSE
+#------------
+class WorkFlowState(TypedDict):
     """LangGraph 工作流的共享状态结构定义"""
 
     messages:Annotated[list, add_messages]
@@ -11,11 +16,11 @@ class WorkFlowState(TypeDict):
 
     current_keywords: list[str]          # 当前轮检索关键词
     retrieval_round: int                 # 当前第几轮检索
-    candidate_documents: list[dict]      # 本轮检索得到的候选文档
-    selected_documents: list[dict]       # 筛选后的高相关文档
+    candidate_documents: list[RetrievedDocument]      # 本轮检索得到的候选文档
 
-    plan: list[str] | None               # 论文段落需求（证据）缺口描述
-    already_read_sections: list[dict]    # 已读取出的论文段落信息（证据）
+    plans: list[str] | None              # 论文段落需求（证据）缺口描述
+    already_read_sections: list[EvidenceSectionPair]    # 已读取出的论文段落信息（证据）
+    evidence_sufficient: bool | False    # 证据是否充分的判断结果
     # planned_sections: list[dict]       # 准备读取的章节 Key:论文名称, Value: 段落标题
 
     report_markdown: str | None          # 最终报告
