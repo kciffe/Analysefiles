@@ -4,7 +4,7 @@ from .nodes import *
 from langgraph.graph import StateGraph,END
 
 def router_after_judge_evidence(workflow_state:ParseWorkFlowState)->str:
-    if workflow_state.evidence_sufficient:
+    if workflow_state["evidence_sufficient"]:
         return "generate_report"
     return "read_sections"
 def build_requirement_graph():
