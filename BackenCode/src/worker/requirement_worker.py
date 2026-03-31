@@ -8,25 +8,6 @@ from src.service.requirement_jobs import (
 )
 
 from ..workflow.requirement import run_requirement_graph
-def run_requirement_job(item_id: str,requirement_data: RequirementParseRequest):
-
-    job = get_requirement_job(item_id)
-    if job is None:
-        return
-
-    set_requirement_job_processing(item_id)
-    
-    inital_state=build_initial_state(item_id, requirement_data)
-
-    try:
-        run_requirement_graph(inital_state)
-        set_requirement_job_success(item_id)
-
-    except Exception as e:
-        set_requirement_job_failed(
-            item_id,
-            error=str(e),
-        )
 
 def build_initial_state(item_id: str, payload_dict: dict) -> ParseWorkFlowState:
     request = SearchDocumentsRequest(
@@ -53,3 +34,23 @@ def build_initial_state(item_id: str, payload_dict: dict) -> ParseWorkFlowState:
         "status": "processing",
         "error_message": None,
     })
+def run_requirement_job(item_id: str,requirement_data: RequirementParseRequest):
+
+    job = get_requirement_job(item_id)
+    if job is None:
+        return
+
+    set_requirement_job_processing(item_id)
+    
+    inital_state=build_initial_state(item_id, requirement_data)
+
+    try:
+        run_requirement_graph(inital_state)
+        set_requirement_job_success(item_id)
+
+    except Exception as e:
+        set_requirement_job_failed(
+            item_id,
+            error=str(e),
+        )
+
