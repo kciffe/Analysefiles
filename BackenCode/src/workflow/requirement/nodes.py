@@ -1,7 +1,7 @@
 from .state import ParseWorkFlowState
 from ...mcp.tool_registry import TOOL_REGISTRY
 from ...agent.report_generator import generate_report_agent
-from ...agent.report_plans_generator import generate_report_plans_agent
+from ...agent import generate_report_plans_agent
 from ..prompt import _GENERATE_REPORT_PROMPT, _GENERATE_PLANS_PROMPT
 from ...schemas.requirement_type import SearchDocumentsRequest
 # 实现每一个 graph node 的具体逻辑。
@@ -10,8 +10,7 @@ def prepare_query_node(workflow_state:ParseWorkFlowState)->ParseWorkFlowState:
     # 准备 query node 的输入，主要是根据当前状态生成检索关键词。
     # 这里可以调用一些工具函数来生成关键词，比如基于当前需求和已选文档的关键词提取。
     # 生成的关键词存储在 workflow_state.current_keywords 中。
-    current_keywords = workflow_state.current_keywords #TODO:调用工具生成所需关键词
-    workflow_state.current_keywords = current_keywords
+    #TODO:调用工具生成所需关键词
     workflow_state["current_step"] = "prepare_query_node"
     return workflow_state
 
@@ -19,7 +18,7 @@ def retrieval_documents_node(workflow_state:ParseWorkFlowState)->ParseWorkFlowSt
     # 根据 workflow_state.current_keywords 进行文献检索，得到候选文档列表。
     # 检索结果存储在 workflow_state.candidate_documents 中。
     workflow_state.candidate_documents = TOOL_REGISTRY["search_documents"](
-        keywords=workflow_state.current_keywords,
+        keywords=workflow_state.search_document_request.keywords,
     )
     workflow_state["current_step"] = "retrieval_documents_node"
     return workflow_state

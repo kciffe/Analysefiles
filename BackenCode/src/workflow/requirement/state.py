@@ -20,7 +20,7 @@ class ParseWorkFlowState(TypedDict):
 
     plans: list[str] | None              # 论文段落需求（证据）缺口描述
     already_read_sections: list[EvidenceSectionPair]    # 已读取出的论文段落信息（证据）
-    evidence_sufficient: bool | False    # 证据是否充分的判断结果
+    evidence_sufficient: bool    # 证据是否充分的判断结果
     # planned_sections: list[dict]       # 准备读取的章节 Key:论文名称, Value: 段落标题
 
     report_markdown: str | None          # 最终报告

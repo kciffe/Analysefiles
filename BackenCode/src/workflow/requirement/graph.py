@@ -2,6 +2,11 @@
 from .state import ParseWorkFlowState
 from .nodes import *
 from langgraph.graph import StateGraph,END
+
+def router_after_judge_evidence(workflow_state:ParseWorkFlowState)->str:
+    if workflow_state.evidence_sufficient:
+        return "generate_report"
+    return "read_sections"
 def build_requirement_graph():
     
     builder=StateGraph(ParseWorkFlowState)
@@ -24,10 +29,13 @@ def build_requirement_graph():
     builder.add_edge("read_sections","judge_evidence")
 
     # 判断是否满足需求分析
-    builder.add_conditional_edges("judge_evidence",{
-        ParseWorkFlowState.evidence_sufficient: "generate_report",
-        not ParseWorkFlowState.evidence_sufficient: "read_sections",
-        }
+    builder.add_conditional_edges(
+        "judge_evidence",
+        router_after_judge_evidence,
+        {
+            "generate_report": "generate_report",
+            "read_sections": "read_sections"
+        }, 
     )
 
     #结束节点

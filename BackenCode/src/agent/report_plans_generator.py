@@ -1,16 +1,8 @@
-import os
 import json
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage,SystemMessage
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-
-llm= ChatOpenAI(
-    model = "deepseek-chat",
-    base_url="https://api.deepseek.com",
-    api_key=DEEPSEEK_API_KEY
-)   
-
-def generate_report_agent(prompt:str) -> str:
+from .llm import get_llm
+def generate_report_plans_agent(prompt:str) -> str:
+    llm = get_llm()
     response=llm.invoke(
         SystemMessage(content="你是一个技术分析规划助手，负责根据用户需求生成检索证据的具体计划。输出严格按照json格式"),
         HumanMessage(content=prompt)
