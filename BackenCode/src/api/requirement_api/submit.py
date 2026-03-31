@@ -40,6 +40,12 @@ async def submit_requirement_parse(
     created_at = datetime.now(timezone.utc).isoformat()
     requirement_data = payload.model_dump(mode="json")
 
+    create_requirement_job(
+        item_id=item_id,
+        name=payload.name,
+        created_at=created_at,
+        requirement_data=requirement_data,
+    )
     # ✅ 调度 worker
     background_tasks.add_task(run_requirement_job, item_id, requirement_data)
 

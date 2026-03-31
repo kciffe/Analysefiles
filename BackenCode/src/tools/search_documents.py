@@ -13,9 +13,9 @@ def search_documents(
     end_date: str | None = None,
     limit: int = 128,
 ):
-    for keyword in (keywords or []):
-        if keyword not in ["LLM Agent", "Tool use"]:
-            return f"{keyword} is not in [LLM Agent, Tool use]"
+    # for keyword in (keywords or []):
+        # if keyword not in ["LLM Agent", "Tool use"]:
+        #     return f"{keyword} is not in [LLM Agent, Tool use]"
     with get_session() as session:
         docs=search_documents_by_keywords(
             session,

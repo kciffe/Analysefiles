@@ -3,6 +3,7 @@ from typing import List
 from copy import deepcopy
 from threading import Lock
 from typing import Any
+from ..schemas import RequirementParseRequest
 
 _jobs: dict[str, dict[str, Any]] = {}
 _jobs_lock = Lock()
@@ -13,7 +14,7 @@ def create_requirement_job(
     item_id: str,
     name: str,
     created_at: str,
-    requirement_data: dict[str, Any],
+    requirement_data: RequirementParseRequest,
 ) -> None:
     with _jobs_lock:
         _jobs[item_id] = {
