@@ -11,18 +11,18 @@ from ..workflow.requirement import run_requirement_graph
 
 def build_initial_state(item_id: str, requirement_parse_request: RequirementParseRequest) -> ParseWorkFlowState:
     request = SearchDocumentsRequest(
-        keywords=requirement_parse_request.keywords or [],
-        doc_types=requirement_parse_request.docTypes,
-        start_date=requirement_parse_request.startDate.strftime("%Y-%m-%d"),
-        end_date=requirement_parse_request.endDate.strftime("%Y-%m-%d"),
+        keywords=requirement_parse_request["keywords"] or [],
+        doc_types=requirement_parse_request["docTypes"],
+        start_date=requirement_parse_request["startDate"].strftime("%Y-%m-%d"),
+        end_date=requirement_parse_request["endDate"].strftime("%Y-%m-%d"),
         limit=128,
     )
 
     return ParseWorkFlowState({
         "messages": [],
-        "requirement": requirement_parse_request.detail or "",
-        "task_name": requirement_parse_request.name or item_id,
-        "search_document_request": request,
+        "requirement": requirement_parse_request["detail"] or "",
+        "task_name": requirement_parse_request["name"] or item_id,
+       "search_document_request": request,
         "current_keywords": request.keywords or [],
         "retrieval_round": 0,
         "candidate_documents": [],
@@ -45,8 +45,14 @@ def run_requirement_job(item_id: str,requirement_data: RequirementParseRequest):
     inital_state=build_initial_state(item_id, requirement_data)
 
     try:
-        run_requirement_graph(inital_state)
-        set_requirement_job_success(item_id)
+        final_state = run_requirement_graph(inital_state)
+        set_requirement_job_success(
+            item_id,
+            result={
+                "success": True,
+                "reportMarkdown": final_state.get("report_markdown"),
+            },
+        )
     except Exception as e:
         set_requirement_job_failed(
             item_id,

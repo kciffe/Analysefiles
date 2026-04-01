@@ -41,12 +41,13 @@ def set_requirement_job_processing(item_id: str) -> None:
             job["status"] = "processing"
 
 
-def set_requirement_job_success(item_id: str,) -> None:
+def set_requirement_job_success(item_id: str, *, result: dict[str, Any] | None = None) -> None:
     with _jobs_lock:
         job = _jobs.get(item_id)
         if job is not None:
             job["status"] = "success"
             job["error"] = None
+            job["result"] = deepcopy(result)
 
 
 def set_requirement_job_failed(item_id: str, *, error: str) -> None:
