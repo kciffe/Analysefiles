@@ -28,7 +28,7 @@ def retrieval_documents_node(workflow_state:ParseWorkFlowState)->ParseWorkFlowSt
 def generate_plans_node(workflow_state:ParseWorkFlowState)->ParseWorkFlowState:
     # 根据 workflow_state.candidate_documents，生成需求分析的规划，存储在 workflow_state.plans 中。
     print("\n✅ 进入 : generate_plans_node")
-    workflow_state["plans"] = generate_report_plans_agent(
+    workflow_state["plans"] = generate_report_plans_agent(#TODO:计划生成规划
         prompt=_GENERATE_PLANS_PROMPT.format(requirement=workflow_state["requirement"],)
     )
     workflow_state["current_step"] = "generate_plans_node"
