@@ -1,3 +1,4 @@
+from datetime import date, datetime
 from ..schemas.requirement_type import SearchDocumentsRequest,RequirementParseRequest
 from ..workflow.requirement.state import ParseWorkFlowState
 from src.service.requirement_jobs import (
@@ -9,12 +10,19 @@ from src.service.requirement_jobs import (
 
 from ..workflow.requirement import run_requirement_graph
 
+def _to_ymd(value):
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d")
+    if isinstance(value, date):
+        return value.strftime("%Y-%m-%d")
+    return value
+
 def build_initial_state(item_id: str, requirement_parse_request: RequirementParseRequest) -> ParseWorkFlowState:
     request = SearchDocumentsRequest(
         keywords=requirement_parse_request["keywords"] or [],
         doc_types=requirement_parse_request["docTypes"],
-        start_date=requirement_parse_request["startDate"].strftime("%Y-%m-%d"),
-        end_date=requirement_parse_request["endDate"].strftime("%Y-%m-%d"),
+        start_date=_to_ymd(requirement_parse_request["startDate"]),
+        end_date=_to_ymd(requirement_parse_request["endDate"]),
         limit=128,
     )
 
