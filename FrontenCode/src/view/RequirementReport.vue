@@ -4,7 +4,7 @@
       <template #header>
         <div class="header">
           <div>
-            <h2>{{ report?.title || '需求报告' }}</h2>
+            <h2>{{ reportTitle }}</h2>
             <p>需求 ID：{{ requirementId }}</p>
           </div>
           <div class="header-actions">
@@ -14,34 +14,9 @@
         </div>
       </template>
 
-      <template v-if="reportReady && report">
-        <section class="section">
-          <h3>摘要</h3>
-          <p class="summary">{{ report.summary }}</p>
-        </section>
-
-        <section v-for="block in report.blocks" :key="block.id" class="section">
-          <h3>{{ block.title }}</h3>
-
-          <p v-if="block.type === 'text'" class="text-content">{{ block.content }}</p>
-
-          <el-table v-else-if="block.type === 'table'" :data="toTableData(block)" border>
-            <el-table-column
-              v-for="column in block.columns"
-              :key="column"
-              :prop="column"
-              :label="column"
-              min-width="140"
-            />
-          </el-table>
-        </section>
-
-        <section class="section">
-          <h3>参考资料</h3>
-          <el-empty v-if="!report.references?.length" description="暂无引用" :image-size="70" />
-          <ul v-else class="refs">
-            <li v-for="(item, index) in report.references" :key="index">{{ toRefText(item) }}</li>
-          </ul>
+      <template v-if="reportReady">
+        <section class="section markdown-wrapper">
+          <article class="markdown-body" v-html="renderedMarkdown" />
         </section>
       </template>
       <template v-else>
@@ -57,18 +32,22 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import MarkdownIt from 'markdown-it'
 import {
   getRequirementReport,
-  type RequirementReport,
   type RequirementReportResponse,
-  type RequirementReportTableBlock,
 } from '@/api/modules/requirementsApi'
 
 const route = useRoute()
 const router = useRouter()
+const md = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true,
+})
 
 const loading = ref(false)
-const report = ref<RequirementReport | null>(null)
+const reportMarkdown = ref('')
 const reportReady = ref(false)
 const polling = ref(false)
 const waiting = ref(true)
@@ -86,35 +65,15 @@ function goBack() {
   router.push('/RequirementList')
 }
 
-function toTableData(block: RequirementReportTableBlock) {
-  return (block.rows || []).map((row) => {
-    const record: Record<string, string> = {}
-    block.columns.forEach((col, index) => {
-      record[col] = row[index] ?? ''
-    })
-    return record
-  })
-}
+const reportTitle = computed(() => {
+  const text = reportMarkdown.value || ''
+  const firstHeading = text.split(/\r?\n/).find((line) => /^#\s*(.+)$/.test(line.trim()))
+  if (!firstHeading) return '需求报告'
+  const matched = firstHeading.trim().match(/^#\s*(.+)$/)
+  return matched?.[1]?.trim() || '需求报告'
+})
 
-function toRefText(item: unknown) {
-  return typeof item === 'string' ? item : JSON.stringify(item)
-}
-
-function normalizeReport(raw: Partial<RequirementReport> | null | undefined): RequirementReport | null {
-  if (!raw || typeof raw !== 'object') return null
-
-  return {
-    title: raw.title ?? '',
-    summary: raw.summary ?? '',
-    blocks: Array.isArray(raw.blocks) ? raw.blocks : [],
-    references: Array.isArray(raw.references) ? raw.references : [],
-  }
-}
-
-function isReportReadyState(data: RequirementReport | null) {
-  if (!data) return false
-  return Boolean(data.title || data.summary || data.blocks.length || data.references.length)
-}
+const renderedMarkdown = computed(() => md.render(reportMarkdown.value || ''))
 
 function stopPolling() {
   if (pollTimer) {
@@ -135,8 +94,8 @@ async function fetchReport(options?: { showLoading?: boolean; showError?: boolea
     const resp = await getRequirementReport(requirementId.value)
     const data = resp as RequirementReportResponse
     waiting.value = Boolean(data.waiting)
-    report.value = normalizeReport(data.result?.report ?? null)
-    reportReady.value = isReportReadyState(report.value)
+    reportMarkdown.value = (data.result?.reportMarkdown || '').trim()
+    reportReady.value = reportMarkdown.value.length > 0
 
     if (!waiting.value) {
       const wasPolling = polling.value
@@ -249,27 +208,55 @@ onBeforeUnmount(() => {
   margin-bottom: 22px;
 }
 
-.section h3 {
-  margin: 0 0 10px;
-  font-size: 16px;
+.markdown-wrapper {
+  margin-bottom: 0;
 }
 
-.summary,
-.text-content {
-  margin: 0;
+.markdown-body {
+  color: #1f2937;
   line-height: 1.8;
-  color: #374151;
-  white-space: pre-wrap;
+  word-break: break-word;
 }
 
-.refs {
-  margin: 0;
-  padding-left: 18px;
+.markdown-body :deep(h1),
+.markdown-body :deep(h2),
+.markdown-body :deep(h3) {
+  margin-top: 20px;
+  margin-bottom: 12px;
+  line-height: 1.35;
 }
 
-.refs li {
-  line-height: 1.8;
-  color: #374151;
+.markdown-body :deep(p),
+.markdown-body :deep(ul),
+.markdown-body :deep(ol),
+.markdown-body :deep(table) {
+  margin: 10px 0;
+}
+
+.markdown-body :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.markdown-body :deep(th),
+.markdown-body :deep(td) {
+  border: 1px solid #e5e7eb;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.markdown-body :deep(code) {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f3f4f6;
+}
+
+.markdown-body :deep(pre) {
+  overflow-x: auto;
+  padding: 12px;
+  border-radius: 8px;
+  background: #111827;
+  color: #f9fafb;
 }
 
 .publish-btn {

@@ -2,7 +2,7 @@ from .state import ParseWorkFlowState
 from ...mcp.tool_registry import TOOL_REGISTRY
 from ...agent.report_generator import generate_report_agent
 from ...agent import generate_report_plans_agent
-from ..prompt import _GENERATE_REPORT_PROMPT, _GENERATE_PLANS_PROMPT
+from .prompt import _GENERATE_REPORT_PROMPT, _GENERATE_PLANS_PROMPT
 from ...schemas.requirement_type import SearchDocumentsRequest
 # 实现每一个 graph node 的具体逻辑。
 

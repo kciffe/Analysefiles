@@ -26,6 +26,10 @@ def search_documents(
             limit=limit,
         )
         payload=[_serialize_document(doc) for doc in docs]
+        # test
+        for doc in payload:
+            print(f"➕检索结果：{doc.get('title')}")
+        #-----------------
         return json.dumps(payload, ensure_ascii=False,indent=2)
 
 def _to_iso_date(value: date | datetime | None) -> str | None:

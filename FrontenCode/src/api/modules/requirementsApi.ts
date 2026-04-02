@@ -84,6 +84,7 @@ export interface RequirementReport {
 export interface RequirementReportPayload {
   success?: boolean
   report?: RequirementReport
+  reportMarkdown?: string
 }
 
 export interface RequirementReportResponse {

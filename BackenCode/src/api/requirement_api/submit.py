@@ -94,6 +94,8 @@ async def query_requirement_result(
     is_waiting = internal_status in {"received", "processing"}
 
     result = job.get("result")
+    if isinstance(result, dict):
+        result.setdefault("reportMarkdown", "")
     result_payload = (
         RequirementParseResponse.model_validate(result) if result is not None else None
     )

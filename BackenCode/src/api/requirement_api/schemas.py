@@ -37,15 +37,10 @@ class RequirementParseRecived(BaseModel):
     createdAt: str
 
 
-class ReportSchema(BaseModel):
-    title: str
-    summary: str
-    blocks: List[ReportBlockText | ReportBlockTable]
-
 
 class RequirementParseResponse(BaseModel):
     success: bool
-    report: ReportSchema
+    reportMarkdown: str | None = None
 
 
 class RequirementParseResultQueryResponse(BaseModel):
