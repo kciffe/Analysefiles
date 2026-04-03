@@ -1,5 +1,5 @@
 from __future__ import annotations
-from langgraph.graph import tool
+from langchain_core.tools import tool
 import json
 import re
 

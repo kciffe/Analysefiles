@@ -1,7 +1,7 @@
 from typing import Literal,Any
 import json
 from datetime import date, datetime
-from langchain.agents import tool
+from langchain_core.tools import tool
 from openai import pydantic_function_tool, OpenAI
 from ..repositories.documents import search_documents_by_keywords
 from ..db import get_session
