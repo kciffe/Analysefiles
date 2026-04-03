@@ -8,5 +8,5 @@ def run_requirement_graph(workflow_state:ParseWorkFlowState)->ParseWorkFlowState
     #     final_state=event
     # return final_state
 
-    return requirement_graph.invoke(workflow_state)
+    return requirement_graph.stream(workflow_state)
 
