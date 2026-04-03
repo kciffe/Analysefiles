@@ -40,7 +40,7 @@ def read_sections_node(workflow_state:ParseWorkFlowState)->ParseWorkFlowState:
     print("\n✅ 进入 : read_sections_node")
     already_read_sections = [] 
     while(len(workflow_state["plans"]) > 0):     
-        plan = workflow_state["plans"].pop(0)#TODO:调用工具读取文档章节内容
+        plan = workflow_state["plans"].pop(0)
     workflow_state["already_read_sections"] = already_read_sections
     workflow_state["current_step"] = "read_sections_node"
     return workflow_state

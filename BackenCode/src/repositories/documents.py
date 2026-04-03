@@ -84,7 +84,7 @@ class RetrievedDocument:
     abstract: str | None
     publish_year: date | None
     keywords: list[str]
-    structure_info: dict[str, Any] | None
+    structure_info: dict[str, Any] | None   # 文档的结构 如:{"level": 1, "title": "E MORE ANALYSIS", "children": [{"level": 2, "title": "E.1 SUCCESS AND FAILURE MODES ANALYSIS"}]}
 
 
 def store_parsed_document(
