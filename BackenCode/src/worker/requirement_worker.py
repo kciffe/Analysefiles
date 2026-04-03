@@ -1,5 +1,5 @@
-from datetime import date, datetime
-from ..schemas.requirement_type import SearchDocumentsRequest,RequirementParseRequest
+﻿from datetime import date, datetime
+from ..schemas.requirement_type import SearchDocumentsRequest, RequirementParseRequest
 from ..workflow.requirement.state import ParseWorkFlowState
 from src.service.requirement_jobs import (
     get_requirement_job,
@@ -10,12 +10,14 @@ from src.service.requirement_jobs import (
 
 from ..workflow.requirement import run_requirement_graph
 
+
 def _to_ymd(value):
     if isinstance(value, datetime):
         return value.strftime("%Y-%m-%d")
     if isinstance(value, date):
         return value.strftime("%Y-%m-%d")
     return value
+
 
 def build_initial_state(item_id: str, requirement_parse_request: RequirementParseRequest) -> ParseWorkFlowState:
     request = SearchDocumentsRequest(
@@ -26,31 +28,34 @@ def build_initial_state(item_id: str, requirement_parse_request: RequirementPars
         limit=128,
     )
 
-    return ParseWorkFlowState({
-        "messages": [],
-        "requirement": requirement_parse_request.detail or "",
-        "task_name": requirement_parse_request.name or item_id,
-       "search_document_request": request,
-        "current_keywords": request.keywords or [],
-        "retrieval_round": 0,
-        "candidate_documents": [],
-        "plans": None,
-        "already_read_sections": [],
-        "evidence_sufficient": False,
-        "report_markdown": None,
-        "current_step": "init",
-        "status": "processing",
-        "error_message": None,
-    })
-def run_requirement_job(item_id: str,requirement_data: RequirementParseRequest):
+    return ParseWorkFlowState(
+        {
+            "messages": [],
+            "requirement": requirement_parse_request.detail or "",
+            "task_name": requirement_parse_request.name or item_id,
+            "search_document_request": request,
+            "current_keywords": request.keywords or [],
+            "retrieval_round": 0,
+            "candidate_documents": [],
+            "plans": None,
+            "already_read_sections": [],
+            "evidence_sufficient": False,
+            "report_markdown": None,
+            "current_step": "init",
+            "status": "processing",
+            "error_message": None,
+        }
+    )
 
+
+def run_requirement_job(item_id: str, requirement_data: RequirementParseRequest):
     job = get_requirement_job(item_id)
     if job is None:
-        return
+        return None
 
     set_requirement_job_processing(item_id)
-    
-    inital_state=build_initial_state(item_id, requirement_data)
+
+    inital_state = build_initial_state(item_id, requirement_data)
 
     try:
         final_state = run_requirement_graph(inital_state)
@@ -61,10 +66,10 @@ def run_requirement_job(item_id: str,requirement_data: RequirementParseRequest):
                 "reportMarkdown": final_state.get("report_markdown"),
             },
         )
+        return final_state
     except Exception as e:
         set_requirement_job_failed(
             item_id,
             error=str(e),
         )
-        raise ValueError(f"job出错 item_id: {item_id}, error: {str(e)}") 
-
+        raise ValueError(f"job出错 item_id: {item_id}, error: {str(e)}")
