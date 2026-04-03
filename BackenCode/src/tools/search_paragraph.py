@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from langgraph.graph import tool
 import json
 import re
 
@@ -62,8 +62,12 @@ def _find_section_text(full_text: str, heading_info: dict) -> str:
 
     return full_text[content_start:].strip()
 
-
+@tool
 def search_paragraph(doc_id: int, section_title: str) -> str:
+    """
+    按文档ID和章节标题检索论文某一节的完整原文内容。
+    目的是精确获取论文的某一节内容，用于后续精度生成报告。
+    """
     with get_session() as session:
         select_by_doc_id = select(DocParsed).where(DocParsed.doc_id == doc_id)
         doc = session.execute(select_by_doc_id).scalar_one_or_none()

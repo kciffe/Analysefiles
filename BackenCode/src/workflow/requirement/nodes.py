@@ -1,9 +1,13 @@
+import json
+from langchain_core.messages import AIMessage,ToolMessage
+
 from .state import ParseWorkFlowState
 from ...mcp.tool_registry import TOOL_REGISTRY
 from ...agent.report_generator import generate_report_agent
 from ...agent import generate_report_plans_agent
 from .prompt import _GENERATE_REPORT_PROMPT, _GENERATE_PLANS_PROMPT
 from ...schemas.requirement_type import SearchDocumentsRequest
+
 # 实现每一个 graph node 的具体逻辑。
 
 def prepare_query_node(workflow_state:ParseWorkFlowState)->ParseWorkFlowState:
@@ -19,10 +23,59 @@ def retrieval_documents_node(workflow_state:ParseWorkFlowState)->ParseWorkFlowSt
     # 根据 workflow_state.current_keywords 进行文献检索，得到候选文档列表。
     # 检索结果存储在 workflow_state.candidate_documents 中。
     print("\n✅ 进入 : retrieval_documents_node")
-    workflow_state["candidate_documents"] = TOOL_REGISTRY["search_documents"](
-        keywords=workflow_state["search_document_request"].keywords,
-    )
-    workflow_state["current_step"] = "retrieval_documents_node"
+    return {
+        "messages": [
+            AIMessage(
+                content=f"执行检索相关文档节点，当前关键词：{workflow_state['current_keywords']}",
+                tool_calls=[
+                    {
+                        "name":"search_documents",
+                        "args":{
+                            "keywords":workflow_state["search_document_request"].keywords,
+                            "doc_types":workflow_state["search_document_request"].doc_types,
+                            "start_date":workflow_state["search_document_request"].start_date,
+                            "end_date":workflow_state["search_document_request"].end_date,
+                            "limit":workflow_state["search_document_request"].limit
+                        }
+                    }
+                ]
+            )
+        ]
+    }
+    # workflow_state["candidate_documents"] = TOOL_REGISTRY["search_documents"](
+    #     keywords=workflow_state["search_document_request"].keywords,
+    # )
+    # workflow_state["current_step"] = "retrieval_documents_node"
+    # return workflow_state
+def collect_retrieval_results_node(workflow_state:ParseWorkFlowState)->ParseWorkFlowState:
+    # 收集检索工具的调用结果，更新 workflow_state.candidate_documents。
+    print("\n✅ 进入 : collect_retrieval_results_node")
+    message=workflow_state.get("messages",[])
+    doc=[]
+
+    #倒序找最后一个search_documents工具调用的结果
+    for msg in reversed(message):
+        if not isinstance(msg, ToolMessage):
+            continue
+        if getattr(msg,"name",None) == "search_documents":
+            continue
+       
+        content=msg.content
+
+        if isinstance(content,str):
+           parsed=json.loads(content)
+        else:
+            parsed=content
+        
+        if isinstance(parsed,list):
+            doc=parsed
+        elif isinstance(parsed, dict) and "data" in parsed and isinstance(parsed["data"], list):
+            docs = parsed["data"]
+        
+        break
+    
+    workflow_state["candidate_documents"] = doc
+    workflow_state["current_step"] = "collect_retrieval_results_node"
     return workflow_state
 
 def generate_plans_node(workflow_state:ParseWorkFlowState)->ParseWorkFlowState:
@@ -38,12 +91,23 @@ def generate_plans_node(workflow_state:ParseWorkFlowState)->ParseWorkFlowState:
 def read_sections_node(workflow_state:ParseWorkFlowState)->ParseWorkFlowState:
     # 根据 workflow_state.selected_documents，读取其中的相关章节内容，存储在 workflow_state.already_read_sections 中。
     print("\n✅ 进入 : read_sections_node")
-    already_read_sections = [] 
-    while(len(workflow_state["plans"]) > 0):     
-        plan = workflow_state["plans"].pop(0)
-    workflow_state["already_read_sections"] = already_read_sections
-    workflow_state["current_step"] = "read_sections_node"
-    return workflow_state
+    return AIMessage(
+        content=f"执行阅读文档相关章节节点，当前选中文档：{workflow_state['selected_documents']}，当前计划：{workflow_state['plans']}",
+        tool_calls=[
+            {
+                "name":"search_paragraph",
+                "args":{
+                    
+                }
+            }
+        ]
+    )
+    # already_read_sections = [] 
+    # while(len(workflow_state["plans"]) > 0):     
+    #     plan = workflow_state["plans"].pop(0)
+    # workflow_state["already_read_sections"] = already_read_sections
+    # workflow_state["current_step"] = "read_sections_node"
+    # return workflow_state
 
 
 def judge_evidence_node(workflow_state:ParseWorkFlowState)->ParseWorkFlowState:

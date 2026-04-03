@@ -1,11 +1,13 @@
 from typing import Literal,Any
 import json
 from datetime import date, datetime
+from langchain.agents import tool
 from openai import pydantic_function_tool, OpenAI
 from ..repositories.documents import search_documents_by_keywords
 from ..db import get_session
 
 #langgraph实现控制循环
+@tool
 def search_documents(
     keywords: list[str] | None = None,
     doc_types: list[str] | None = None,
@@ -13,6 +15,9 @@ def search_documents(
     end_date: str | None = None,
     limit: int = 128,
 ):
+    """
+    根据关键词、文档类型、开始时间、结束时间搜索最多limit个文档
+    """
     # for keyword in (keywords or []):
         # if keyword not in ["LLM Agent", "Tool use"]:
         #     return f"{keyword} is not in [LLM Agent, Tool use]"
@@ -28,7 +33,7 @@ def search_documents(
         payload=[_serialize_document(doc) for doc in docs]
         # test
         for doc in payload:
-            print(f"➕检索结果：{doc.get('title')}")
+            print(f"➕检索结果：{json.dumps(doc, ensure_ascii=False)}")
         #-----------------
         return json.dumps(payload, ensure_ascii=False,indent=2)
 
