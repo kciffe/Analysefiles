@@ -17,9 +17,16 @@ class SearchDocumentsRequest(BaseModel):
     limit: int = Field(128, description="返回的文档数量上限")   
 
 class RequirementParseRequest(BaseModel):
+    """需求解析请求参数"""
     name: str
     startDate: date
     endDate: date
     docTypes: List[str]
     keywords: List[str]
     detail: str
+
+class ReTrievalPlan(BaseModel):
+    """检索计划"""
+    doc_id: int
+    section_title: str
+    why_read: str
