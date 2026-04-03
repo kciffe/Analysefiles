@@ -19,17 +19,17 @@ def _to_ymd(value):
 
 def build_initial_state(item_id: str, requirement_parse_request: RequirementParseRequest) -> ParseWorkFlowState:
     request = SearchDocumentsRequest(
-        keywords=requirement_parse_request["keywords"] or [],
-        doc_types=requirement_parse_request["docTypes"],
-        start_date=_to_ymd(requirement_parse_request["startDate"]),
-        end_date=_to_ymd(requirement_parse_request["endDate"]),
+        keywords=requirement_parse_request.keywords,
+        doc_types=requirement_parse_request.docTypes,
+        start_date=_to_ymd(requirement_parse_request.startDate),
+        end_date=_to_ymd(requirement_parse_request.endDate),
         limit=128,
     )
 
     return ParseWorkFlowState({
         "messages": [],
-        "requirement": requirement_parse_request["detail"] or "",
-        "task_name": requirement_parse_request["name"] or item_id,
+        "requirement": requirement_parse_request.detail or "",
+        "task_name": requirement_parse_request.name or item_id,
        "search_document_request": request,
         "current_keywords": request.keywords or [],
         "retrieval_round": 0,

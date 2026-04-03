@@ -26,7 +26,7 @@ def retrieval_documents_node(workflow_state:ParseWorkFlowState)->ParseWorkFlowSt
     return {
         "messages": [
             AIMessage(
-                content=f"执行检索相关文档节点，当前关键词：{workflow_state['current_keywords']}",
+                content=f"执行检索相关文档节点，当前关键词：{workflow_state['search_document_request'].keywords}",
                 tool_calls=[
                     {
                         "name":"search_documents",
