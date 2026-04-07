@@ -4,16 +4,16 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from .llm import get_llm_without_tools
 from .prompt import _GENERATE_EVIDENCE_PROMPT
 from ...workflow.requirement import ParseWorkFlowState
+from ...schemas.requirement_type import ReTrievalPlan
 
-
-def _parse_plan_array(text: str) -> list[dict]:
+def _parse_plan_array(text: str) -> list[ReTrievalPlan]:
     text = (text or "").strip()
     if not text:
         return []
 
     try:
         data = json.loads(text)
-        return data if isinstance(data, list) else []
+        return [ReTrievalPlan(**plan) for plan in data] if isinstance(data, list) else []
     except Exception:
         pass
 
@@ -22,14 +22,14 @@ def _parse_plan_array(text: str) -> list[dict]:
     if l != -1 and r != -1 and r > l:
         try:
             data = json.loads(text[l : r + 1])
-            return data if isinstance(data, list) else []
+            return [ReTrievalPlan(**plan) for plan in data] if isinstance(data, list) else []
         except Exception:
             return []
 
     return []
 
 
-def generate_evidence_agent(parse_workflow_state: ParseWorkFlowState) -> ParseWorkFlowState:
+def generate_evidence_agent(parse_workflow_state: ParseWorkFlowState) -> list[ReTrievalPlan]:
     print("\n⚠️ 进入 : generate_evidence_agent")
 
     llm = get_llm_without_tools()
@@ -50,6 +50,6 @@ def generate_evidence_agent(parse_workflow_state: ParseWorkFlowState) -> ParseWo
 
     print(f"➕ 生成的检索计划数量：{len(plans)}")
     for plan in plans:
-        print(f"➕➕  - {plan}")
-    parse_workflow_state["retrieval_plan"] = plans
-    return parse_workflow_state
+        print(f"ℹ️   - {plan}")
+    
+    return  plans

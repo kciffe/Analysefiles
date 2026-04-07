@@ -28,6 +28,8 @@ if final_state is None:
 else:
     print("\n任务完成")
     print(f"候选文档数: {len(final_state.get('candidate_documents') or [])}")
+    print(f"工具追踪条数: {len(final_state.get('tool_traces') or [])}")
+    print(f"工具追踪预览: {final_state.get('tool_traces')[:3] if final_state.get('tool_traces') else []}")
     report = final_state.get("report_markdown")
     print("报告预览:")
     print((report[:600] + "...") if isinstance(report, str) and len(report) > 600 else report)

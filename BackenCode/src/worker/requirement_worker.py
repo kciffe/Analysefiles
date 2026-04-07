@@ -20,6 +20,8 @@ def _to_ymd(value):
 
 
 def build_initial_state(item_id: str, requirement_parse_request: RequirementParseRequest) -> ParseWorkFlowState:
+    if isinstance(requirement_parse_request, dict):
+        requirement_parse_request = RequirementParseRequest(**requirement_parse_request)
     request = SearchDocumentsRequest(
         keywords=requirement_parse_request.keywords,
         doc_types=requirement_parse_request.docTypes,

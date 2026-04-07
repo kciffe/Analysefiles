@@ -19,6 +19,7 @@ class ParseWorkFlowState(TypedDict):
 
     candidate_documents: list[RetrievedDocument]        # 本轮检索得到的候选文档
     retrieval_plan: list[ReTrievalPlan] | None          # 检索计划
+    pending_read_map: dict[str, dict]                   # 用于查询检索工具id以得到后续检索出的对应的段落信息
 
     plans: list[str] | None              # 论文段落需求（证据）缺口描述
     already_read_sections: list[EvidenceSectionPair]    # 已读取出的论文段落信息（证据）
