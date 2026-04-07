@@ -1,17 +1,12 @@
-from datetime import datetime, timezone
+﻿from datetime import datetime, timezone
 from uuid import uuid4
+from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
-from src.worker.requirement_worker import run_requirement_job
-# from src.agent.base import Agent
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
-from src.service.requirement_jobs import (
-    create_requirement_job,
-    get_requirement_job,
-    set_requirement_job_failed,
-    set_requirement_job_processing,
-    set_requirement_job_success,
-)
+from src.service.requirement_jobs import create_requirement_job, get_requirement_job
+from src.worker.requirement_worker import iter_requirement_job_events
 
 from ..schemas import ResponseModel
 from .schemas import (
@@ -31,12 +26,35 @@ _STATUS_TO_API = {
 }
 
 
-@router.post("/parse", response_model=ResponseModel[RequirementParseRecived])
-async def submit_requirement_parse(
-    background_tasks: BackgroundTasks,
-    payload: RequirementParseRequest,
-) -> ResponseModel[RequirementParseRecived]:
-    item_id = uuid4().hex
+def _format_sse(event: str, data: str) -> str:
+    return f"event: {event}\\ndata: {data}\\n\\n"
+
+
+def _build_result_payload(job: dict) -> RequirementParseResultQueryResponse:
+    internal_status = str(job["status"])
+    is_waiting = internal_status in {"received", "processing"}
+
+    result = job.get("result")
+    if isinstance(result, dict):
+        result.setdefault("reportMarkdown", "")
+    result_payload = (
+        RequirementParseResponse.model_validate(result) if result is not None else None
+    )
+
+    return RequirementParseResultQueryResponse(
+        waiting=is_waiting,
+        id=job["id"],
+        name=job["name"],
+        status=_STATUS_TO_API.get(internal_status, "已失败"),
+        createdAt=job["createdAt"],
+        result=result_payload,
+        error=job.get("error"),
+    )
+
+
+@router.post("/parse")
+def submit_requirement_parse(payload: RequirementParseRequest) -> StreamingResponse:
+    item_id =f"datetime.now().strftime('%Y-%m-%d_%H-%M-%S')-{uuid4().hex}"
     created_at = datetime.now(timezone.utc).isoformat()
     requirement_data = payload.model_dump(mode="json")
 
@@ -46,37 +64,51 @@ async def submit_requirement_parse(
         created_at=created_at,
         requirement_data=requirement_data,
     )
-    # ✅ 调度 worker
-    background_tasks.add_task(run_requirement_job, item_id, requirement_data)
 
-    return ResponseModel(
-        code=200,
-        msg="成功提交需求解析任务",
-        data=RequirementParseRecived(
-            id=item_id,
-            name=payload.name,
-            status="已发布",
-            createdAt=created_at,
-        ),
+    def event_stream():
+        received_payload = ResponseModel(
+            code=200,
+            msg="成功提交需求解析任务",
+            data=RequirementParseRecived(
+                id=item_id,
+                name=payload.name,
+                status="已发布",
+                createdAt=created_at,
+            ),
+        )
+        # 先立刻发第一条事件，告诉前端“任务已创建，连接正常”。
+        yield _format_sse("received", received_payload.model_dump_json())
+
+        for event in iter_requirement_job_events(item_id, requirement_data):
+            event_name = str(event.get("event", "progress"))
+            event_data = event.get("data", {})
+            event_payload = ResponseModel[dict](
+                code=200,
+                msg="收到后端响应",
+                data=event_data,
+            )
+            yield _format_sse(event_name, event_payload.model_dump_json())
+
+        final_job = get_requirement_job(item_id)
+        if final_job is not None:
+            final_payload = ResponseModel(
+                code=200,
+                msg="收到后端响应",
+                data=_build_result_payload(final_job),
+            )
+            yield _format_sse("result", final_payload.model_dump_json())
+
+        yield _format_sse("done", '{"ok": true}')
+    # 把整个 event_stream() 作为 HTTP 流返回
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",    # 告诉浏览器不要缓存
+            "Connection": "keep-alive",     # 告诉浏览器长连接
+            "X-Accel-Buffering": "no",      # 告诉 Nginx 不缓存这个响应
+        },
     )
-
-    # flag = False
-    # agent = Agent()
-    # def generator_():
-    #     if not flag:
-    #         yield f"data: {ResponseModel(code=200, msg='成功提交需求解析任务', data=RequirementParseRecived(id=item_id, name=payload.name, status='已发布', createdAt=created_at)).model_dump_json()}\n\n"
-    #         flag = True
-    #     else:
-    #         yield agent.run(payload)
-    
-
-    # return StreamingResponse(generator_(), media_type="text/event-stream")
-
-    #TODO:
-    #做一个迭代器，满足SSE格式，返回的类型为stringmingresponse
-    # background_tasks.add_task(_run_requirement_analysis, item_id)
-
-
 
 
 @router.get(
@@ -90,26 +122,8 @@ async def query_requirement_result(
     if job is None:
         raise HTTPException(status_code=404, detail="Requirement item not found.")
 
-    internal_status = str(job["status"])
-    is_waiting = internal_status in {"received", "processing"}
-
-    result = job.get("result")
-    if isinstance(result, dict):
-        result.setdefault("reportMarkdown", "")
-    result_payload = (
-        RequirementParseResponse.model_validate(result) if result is not None else None
-    )
-
     return ResponseModel(
         code=200,
         msg="收到后端响应",
-        data=RequirementParseResultQueryResponse(
-            waiting=is_waiting,
-            id=job["id"],
-            name=job["name"],
-            status=_STATUS_TO_API.get(internal_status, "已失败"),
-            createdAt=job["createdAt"],
-            result=result_payload,
-            error=job.get("error"),
-        ),
+        data=_build_result_payload(job),
     )
