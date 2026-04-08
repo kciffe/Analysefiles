@@ -79,9 +79,12 @@ class StoredDocument:
 @dataclass(frozen=True)
 class RetrievedDocument:
     id: int
+    name: str
     title: str
+    doc_type: str | None
     authors:str | None
     abstract: str | None
+    full_text: str
     publish_year: date | None
     keywords: list[str]
     struct_info: dict[str, Any] | None
@@ -215,9 +218,12 @@ def search_documents_by_keywords(
     return [
         RetrievedDocument(
             id=file_metadata.id,
+            name=file_resource.name,
             title=file_metadata.title,
+            doc_type=file_resource.type,
             authors=file_metadata.authors,
             abstract=file_metadata.abstract,
+            full_text=doc_parsed.full_text,
             publish_year=file_metadata.publish_year,
             keywords=file_metadata.keywords,
             struct_info=doc_parsed.structure_info,
