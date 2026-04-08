@@ -1,10 +1,9 @@
-<template>
+﻿<template>
   <div class="page">
-    <!-- 顶部栏 -->
     <div class="header">
       <div class="header-left">
         <div class="title">新建需求</div>
-        <div class="sub">填写研究主题与检索条件，点击“解析需求”进入后续完善流程</div>
+        <div class="sub">填写研究主题与检索条件，点击“解析需求”后进入报告页查看进度与结果。</div>
       </div>
 
       <div class="header-right">
@@ -13,15 +12,8 @@
     </div>
 
     <div class="content" v-loading="loading">
-      <!-- 左：表单 -->
       <el-card class="card form-card" shadow="never">
-        <el-form
-          ref="formRef"
-          :model="form"
-          :rules="rules"
-          label-position="top"
-          class="form"
-        >
+        <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="form">
           <el-form-item label="主题/技术方向" prop="name">
             <el-input
               v-model="form.name"
@@ -46,14 +38,13 @@
 
           <el-form-item label="文档类型" prop="docTypes">
             <el-checkbox-group v-model="form.docTypes">
-              <el-checkbox v-for="type in REQUIREMENT_DOC_TYPE_ALL " :key="type" :label="type">
-                {{ type }} 
-              </el-checkbox> 
+              <el-checkbox v-for="type in REQUIREMENT_DOC_TYPE_ALL" :key="type" :label="type">
+                {{ type }}
+              </el-checkbox>
             </el-checkbox-group>
           </el-form-item>
 
           <el-form-item label="关键词" prop="keywords">
-            <!-- PPT效果：输入关键词，回车确认；这里用 el-select 多选+可创建实现 -->
             <el-select
               v-model="form.keywords"
               multiple
@@ -70,7 +61,7 @@
               v-model="form.detail"
               type="textarea"
               :rows="18"
-              placeholder="请输入你的具体需求，例如：希望对某方向进行技术路线梳理、对比近两年方法优缺点、给出可复现的基线与改进点等…"
+              placeholder="请输入你的具体需求，例如：梳理某方向技术路线、对比近两年方法优缺点、给出可复现基线与改进点。"
               maxlength="2000"
               show-word-limit
               class="no-resize"
@@ -79,29 +70,17 @@
 
           <div class="footer">
             <el-button @click="reset">重置</el-button>
-            <el-button
-              type="primary"
-              :loading="submitting"
-              :icon="MagicStick"
-              @click="submit"
-            >
+            <el-button type="primary" :loading="submitting" :icon="MagicStick" @click="submit">
               解析需求
             </el-button>
           </div>
         </el-form>
       </el-card>
 
-      <!-- 右：预览与提示 -->
       <div class="side">
         <el-card class="card json-card" shadow="never">
           <div class="side-title">请求 JSON 预览</div>
-          <el-input
-            class="preview no-resize"
-            type="textarea"
-            :rows="25"
-            :model-value="payloadPreview"
-            readonly
-          />
+          <el-input class="preview no-resize" type="textarea" :rows="25" :model-value="payloadPreview" readonly />
           <div class="side-actions">
             <el-button size="small" plain @click="copyPreview">复制</el-button>
           </div>
@@ -110,10 +89,10 @@
         <el-card class="card tips tips-card" shadow="never">
           <div class="side-title">填写建议</div>
           <ul class="tips-list">
-            <li>主题尽量包含领域与任务，例如：RAG目标信息检测调研 / 多模态技术分析对比。</li>
-            <li>关键词建议包含：任务词 + 场景词 + 方法词（可多组）。</li>
-            <li>时间范围可先给近 3–5 年，后续可在完善页继续细化。</li>
-            <li>点击“解析需求”后将进入需求完善/后续交互流程。</li>
+            <li>主题尽量包含领域与任务，例如：RAG 信息检索优化、多模态技术对比。</li>
+            <li>关键词建议包含任务词、场景词、方法词，方便召回更准确。</li>
+            <li>时间范围可先选近 3-5 年，后续可继续细化。</li>
+            <li>提交后会跳转到报告页，并实时展示 LangGraph 执行进度。</li>
           </ul>
         </el-card>
       </div>
@@ -129,9 +108,13 @@ import { ElMessage } from 'element-plus'
 import { MagicStick } from '@element-plus/icons-vue'
 
 import { parseRequirement } from '@/api/modules/requirementsApi'
-import  {type  RequirementCreateRequest, type RequirementDocType, REQUIREMENT_DOC_TYPE_ALL} from '@/api/modules/requirementsApi'
-const router = useRouter()
+import {
+  type RequirementCreateRequest,
+  type RequirementDocType,
+  REQUIREMENT_DOC_TYPE_ALL,
+} from '@/api/modules/requirementsApi'
 
+const router = useRouter()
 const formRef = ref<FormInstance>()
 
 const form = reactive<{
@@ -151,15 +134,7 @@ const form = reactive<{
 const rules: FormRules = {
   name: [{ required: true, message: '请填写主题/技术方向', trigger: 'blur' }],
   dateRange: [{ required: true, message: '请选择时间范围', trigger: 'change' }],
-  docTypes: [
-    {
-      type: 'array',
-      required: true,
-      min: 1,
-      message: '至少选择一种文档类型',
-      trigger: 'change',
-    },
-  ],
+  docTypes: [{ type: 'array', required: true, min: 1, message: '至少选择一种文档类型', trigger: 'change' }],
   detail: [{ required: true, message: '请填写具体需求', trigger: 'blur' }],
 }
 
@@ -178,10 +153,7 @@ function buildPayload(): RequirementCreateRequest {
   }
 }
 
-const payloadPreview = computed(() => {
-  const p = buildPayload()
-  return JSON.stringify(p, null, 2)
-})
+const payloadPreview = computed(() => JSON.stringify(buildPayload(), null, 2))
 
 function goBack() {
   router.push('/RequirementList')
@@ -201,23 +173,17 @@ async function submit() {
   try {
     loading.value = true
     submitting.value = true
-
     await formRef.value.validate()
 
-    const payload = buildPayload()
-    const resp = await parseRequirement(payload)
-    const item = (resp as any)?.item ?? resp
-
-    if (!item?.id) {
+    const resp = await parseRequirement(buildPayload())
+    if (!resp?.id) {
       ElMessage.warning('后端未返回有效的需求 ID')
       return
     }
 
-    ElMessage.success('需求解析成功，正在跳转报告页')
-
-    await router.push(`/requirements/${item.id}/report`)
+    ElMessage.success('已提交，正在跳转报告页')
+    await router.push(`/requirements/${resp.id}/report`)
   } catch (e: any) {
-    // element-plus validate 抛错时不需要额外提示；API 错误才提示
     if (e?.message) ElMessage.error(e.message)
   } finally {
     loading.value = false
@@ -238,11 +204,10 @@ async function copyPreview() {
 <style scoped>
 .page {
   width: 100%;
-  height: 100%;           /* 保险：至少铺满视口 */
+  height: 100%;
   padding: 22px 26px;
   box-sizing: border-box;
   background: #f6f7fb;
-
   display: flex;
   flex-direction: column;
 }
@@ -267,14 +232,13 @@ async function copyPreview() {
   color: #6b7280;
 }
 
-/* 头部不变，关键是 content 要吃满剩余高度 */
 .content {
   flex: 1;
-  min-height: 0;                /* 防止内部滚动/溢出把布局撑坏 */
+  min-height: 0;
   display: grid;
   grid-template-columns: 1fr 360px;
   gap: 16px;
-  align-items: stretch;         /* 两列高度拉伸一致 */
+  align-items: stretch;
 }
 
 .card {
@@ -283,7 +247,6 @@ async function copyPreview() {
   background: #fff;
 }
 
-/* 左侧表单卡：高度吃满 + 内部变成列布局 */
 .form-card {
   height: 100%;
   display: flex;
@@ -296,6 +259,7 @@ async function copyPreview() {
   display: flex;
   flex-direction: column;
 }
+
 .form {
   flex: 1;
   min-height: 0;
@@ -308,7 +272,6 @@ async function copyPreview() {
   color: #111827;
 }
 
-/* 让底部按钮区始终贴底 */
 .footer {
   margin-top: auto;
   display: flex;
@@ -316,7 +279,6 @@ async function copyPreview() {
   gap: 10px;
 }
 
-/* 右侧列：必须撑满高度 */
 .side {
   height: 100%;
   min-height: 0;
@@ -324,26 +286,30 @@ async function copyPreview() {
   flex-direction: column;
   gap: 16px;
 }
-/* 右侧第一张卡（JSON那张）吃掉剩余高度 */
+
 .json-card {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
+
 .json-card :deep(.el-card__body) {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
+
 .json-card .preview {
   flex: 1;
   min-height: 0;
 }
+
 .tips-card {
   flex: 0 0 auto;
 }
+
 .side-title {
   font-size: 13px;
   font-weight: 800;
@@ -373,7 +339,6 @@ async function copyPreview() {
   resize: none;
 }
 
-/* 响应式：窄屏堆叠 */
 @media (max-width: 1100px) {
   .content {
     grid-template-columns: 1fr;

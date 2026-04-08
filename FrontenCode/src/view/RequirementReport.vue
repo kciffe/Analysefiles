@@ -8,19 +8,26 @@
             <p>需求 ID：{{ requirementId }}</p>
           </div>
           <div class="header-actions">
-            <el-tag v-if="waiting && polling" type="warning" effect="plain">报告生成中，自动刷新中...</el-tag>
+            <el-tag v-if="waiting" type="warning" effect="plain">报告生成中</el-tag>
             <el-button plain @click="goBack">返回列表</el-button>
           </div>
         </div>
       </template>
+
+      <section v-if="waiting" class="section">
+        <el-steps :active="activeStep" finish-status="success" simple>
+          <el-step v-for="s in STEPS" :key="s.key" :title="s.title" />
+        </el-steps>
+        <p class="progress-text">当前节点：{{ currentNodeLabel }}</p>
+      </section>
 
       <template v-if="reportReady">
         <section class="section markdown-wrapper">
           <article class="markdown-body" v-html="renderedMarkdown" />
         </section>
       </template>
-      <template v-else>
-        <el-empty :description="waiting ? '报告生成中，请稍候...' : '暂未生成可展示的报告内容'" :image-size="72" />
+      <template v-else-if="!waiting">
+        <el-empty :description="errorText || '暂未生成可展示的报告内容'" :image-size="72" />
       </template>
     </el-card>
 
@@ -33,136 +40,129 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import MarkdownIt from 'markdown-it'
-import {
-  getRequirementReport,
-  type RequirementReportResponse,
-} from '@/api/modules/requirementsApi'
+import { API } from '@/api/endpoints'
+import { getRequirementReport, type RequirementReportResponse } from '@/api/modules/requirementsApi'
 
 const route = useRoute()
 const router = useRouter()
-const md = new MarkdownIt({
-  html: false,
-  linkify: true,
-  breaks: true,
-})
+const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
+
+const STEPS = [
+  { key: 'prepare_query', title: '准备查询' },
+  { key: 'retrieval_documents', title: '检索文档' },
+  { key: 'collect_retrieval_results', title: '收集文档' },
+  { key: 'generate_evidence', title: '生成证据计划' },
+  { key: 'read_sections', title: '读取段落' },
+  { key: 'collect_read_sections_results', title: '收集段落' },
+  { key: 'generate_report', title: '生成报告' },
+]
 
 const loading = ref(false)
-const reportMarkdown = ref('')
-const reportReady = ref(false)
-const polling = ref(false)
 const waiting = ref(true)
+const reportReady = ref(false)
+const reportMarkdown = ref('')
+const errorText = ref('')
+const currentNode = ref('')
+const reachedStep = ref(0)
+let sse: EventSource | null = null
 
 const requirementId = computed(() => String(route.params.id || ''))
+const renderedMarkdown = computed(() => md.render(reportMarkdown.value || ''))
 
-const POLL_INTERVAL_MS = 3000
-const MAX_POLL_TIMES = 120
+const reportTitle = computed(() => {
+  const line = (reportMarkdown.value || '').split(/\r?\n/).find((x) => /^#\s+/.test(x.trim()))
+  return line ? line.replace(/^#\s+/, '').trim() : '需求报告'
+})
 
-let pollTimer: ReturnType<typeof setTimeout> | null = null
-let pollTimes = 0
-let pollingRequesting = false
+const currentNodeLabel = computed(() => {
+  const hit = STEPS.find((x) => x.key === currentNode.value)
+  return hit?.title || (currentNode.value || '等待开始')
+})
+
+const activeStep = computed(() => {
+  if (!waiting.value) return STEPS.length
+  return reachedStep.value
+})
 
 function goBack() {
   router.push('/RequirementList')
 }
 
-const reportTitle = computed(() => {
-  const text = reportMarkdown.value || ''
-  const firstHeading = text.split(/\r?\n/).find((line) => /^#\s*(.+)$/.test(line.trim()))
-  if (!firstHeading) return '需求报告'
-  const matched = firstHeading.trim().match(/^#\s*(.+)$/)
-  return matched?.[1]?.trim() || '需求报告'
-})
-
-const renderedMarkdown = computed(() => md.render(reportMarkdown.value || ''))
-
-function stopPolling() {
-  if (pollTimer) {
-    clearTimeout(pollTimer)
-    pollTimer = null
-  }
-  polling.value = false
+function closeSSE() {
+  sse?.close()
+  sse = null
 }
 
-async function fetchReport(options?: { showLoading?: boolean; showError?: boolean }) {
+function updateFromResult(data: RequirementReportResponse) {
+  waiting.value = Boolean(data.waiting)
+  reportMarkdown.value = (data.result?.reportMarkdown || '').trim()
+  reportReady.value = reportMarkdown.value.length > 0
+  errorText.value = data.error || ''
+}
+
+async function fetchReport() {
+  if (!requirementId.value) return
+  const data = (await getRequirementReport(requirementId.value)) as RequirementReportResponse
+  updateFromResult(data)
+}
+
+function connectSSE() {
+  if (!requirementId.value) return
+  closeSSE()
+
+  sse = new EventSource(API.RequirementList.STREAM(requirementId.value))
+
+  sse.addEventListener('progress', (ev) => {
+    const payload = JSON.parse((ev as MessageEvent).data)
+    const node = payload?.data?.node
+    if (!node) return
+
+    currentNode.value = String(node)
+    const idx = STEPS.findIndex((x) => x.key === currentNode.value)
+    if (idx >= 0) {
+      reachedStep.value = Math.max(reachedStep.value, idx + 1)
+    }
+  })
+
+  sse.addEventListener('failed', (ev) => {
+    const payload = JSON.parse((ev as MessageEvent).data)
+    errorText.value = payload?.data?.error || '报告生成失败'
+    waiting.value = false
+    ElMessage.error(errorText.value)
+  })
+
+  sse.addEventListener('result', async () => {
+    await fetchReport()
+  })
+
+  sse.addEventListener('done', async () => {
+    await fetchReport()
+    closeSSE()
+    if (reportReady.value) ElMessage.success('报告生成完成')
+  })
+
+  sse.onerror = () => {
+    closeSSE()
+  }
+}
+
+onMounted(async () => {
   if (!requirementId.value) {
-    if (options?.showError) ElMessage.error('缺少需求 ID')
-    return true
+    ElMessage.error('缺少需求 ID')
+    return
   }
 
-  if (options?.showLoading) loading.value = true
+  loading.value = true
   try {
-    const resp = await getRequirementReport(requirementId.value)
-    const data = resp as RequirementReportResponse
-    waiting.value = Boolean(data.waiting)
-    reportMarkdown.value = (data.result?.reportMarkdown || '').trim()
-    reportReady.value = reportMarkdown.value.length > 0
-
-    if (!waiting.value) {
-      const wasPolling = polling.value
-      stopPolling()
-      if (wasPolling && reportReady.value) {
-        ElMessage.success('报告生成完成')
-      }
-      if (!reportReady.value && data.error) {
-        ElMessage.warning(String(data.error))
-      }
-      return true
-    }
-    return false
-  } catch (e: any) {
-    if (options?.showError) ElMessage.error(e?.message || '获取报告失败')
-    return false
+    await fetchReport()
+    if (waiting.value) connectSSE()
   } finally {
-    if (options?.showLoading) loading.value = false
+    loading.value = false
   }
-}
-
-function startPolling() {
-  if (pollTimer) return
-
-  polling.value = true
-  pollTimes = 0
-
-  const pollOnce = async () => {
-    if (!polling.value) return
-    if (pollingRequesting) {
-      pollTimer = setTimeout(pollOnce, POLL_INTERVAL_MS)
-      return
-    }
-
-    pollingRequesting = true
-    pollTimes += 1
-
-    const done = await fetchReport()
-    pollingRequesting = false
-
-    if (done) {
-      return
-    }
-
-    if (pollTimes >= MAX_POLL_TIMES) {
-      stopPolling()
-      ElMessage.warning('报告仍在生成中，请稍后刷新')
-      return
-    }
-
-    pollTimer = setTimeout(pollOnce, POLL_INTERVAL_MS)
-  }
-
-  pollTimer = setTimeout(pollOnce, POLL_INTERVAL_MS)
-}
-
-async function init() {
-  const done = await fetchReport({ showLoading: true, showError: true })
-  if (!done) startPolling()
-}
-
-onMounted(() => {
-  init()
 })
 
 onBeforeUnmount(() => {
-  stopPolling()
+  closeSSE()
 })
 </script>
 
@@ -206,6 +206,12 @@ onBeforeUnmount(() => {
 
 .section {
   margin-bottom: 22px;
+}
+
+.progress-text {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #6b7280;
 }
 
 .markdown-wrapper {

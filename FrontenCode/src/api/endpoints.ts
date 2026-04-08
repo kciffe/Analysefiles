@@ -20,6 +20,7 @@ export const API = {
     REMOVE: (_id: string) => 'http://127.0.0.1:4523/m2/7688138-7430664-default/410511662',
     RUN: (_id: string) => 'http://127.0.0.1:4523/m2/7688138-7430664-default/410499925',
     REPORT: (id: string) => `/requirements/${id}/result`,
+    STREAM: (id: string) => `/requirements/${id}/stream`,
   },
 } as const
 

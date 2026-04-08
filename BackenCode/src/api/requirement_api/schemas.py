@@ -1,4 +1,4 @@
-from datetime import date
+﻿from datetime import date
 from typing import List, Literal
 
 from pydantic import BaseModel
@@ -35,7 +35,6 @@ class RequirementParseRecived(BaseModel):
     name: str
     status: RequirementStatus
     createdAt: str
-
 
 
 class RequirementParseResponse(BaseModel):

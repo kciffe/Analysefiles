@@ -6,3 +6,14 @@ export interface RequirementItem {
   status: RequirementStatus
   createdAt: string
 }
+
+export type SseFrame = {
+  event: string
+  data: string
+}
+
+export type ApiEnvelope<T> = {
+  code?: number
+  msg?: string
+  data?: T
+}

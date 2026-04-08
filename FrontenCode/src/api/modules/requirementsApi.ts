@@ -13,7 +13,10 @@ interface RequirementCreateResponse {
 }
 
 interface RequirementParseResponse {
-  item: RequirementItem
+  id: string
+  name: string
+  status: string
+  createdAt: string
 }
 
 interface RequirementRunResponse {
@@ -109,7 +112,7 @@ export function createRequirement(payload: RequirementCreateRequest) {
 
 /** 解析需求 */
 export function parseRequirement(payload: RequirementCreateRequest) {
-  return http.post<any, RequirementItem | RequirementParseResponse>(API.RequirementList.CREATE, payload)
+  return http.post<any, RequirementParseResponse>(API.RequirementList.CREATE, payload)
 }
 
 /** 删除需求 */
