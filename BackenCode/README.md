@@ -10,11 +10,13 @@ uv sync
 ## 启动
 Server mode
 ```bash
-uvicorn bksrc.api.main:app --host 0.0.0.0 --port 8000
+uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 ```
 Development mode
 ```
 uvicorn src.api.main:app --reload
-uv run uvicorn src.api.main:app --reload
+ssh -N -L 18081:127.0.0.1:8081 -p 10611 root@10.0.6.135
+uv run uvicorn src.api.main:app --reload --env-file .env
+
 ```# deepresearch
 

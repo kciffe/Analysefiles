@@ -1,10 +1,14 @@
-from typing import Any, TypedDict, List
 import httpx
+import os
+from typing import Any, TypedDict, List
 from pydantic import BaseModel
 from openai import OpenAI
 from textwrap import dedent
 
 from ..repositories.labels import Labels, select_labels
+
+MODEL = os.getenv("MODEL")
+MINERU_BASE_URL = os.getenv("MINERU_BASE_URL")
 
 class MarkdownContent(TypedDict):
     md_content: str
@@ -54,33 +58,27 @@ child：二级标签，属于 main 标签下的子类别。
 """
 
 
-
-def analyze_with_openclaw(
-    file_bytes: bytes, file_name: str, doc_type: str
-) -> dict[str, Any]:
-    parse_service = ParseService()
-    result = parse_service.run(
-        file_bytes=file_bytes, file_name=file_name, doc_type=doc_type
-    )
-    if hasattr(result, "model_dump"):
-        return result.model_dump()
-    if isinstance(result, dict):
-        return dict(result)
-    raise ValueError("Parse service returned unsupported result type.")
-
-
 class ParseService(BaseModel):
 
-    openai_client:OpenAI = OpenAI(base_url="http://localhost:11434/v1", api_key="<EMPTY>")
-
-    model:str = "qwen3:8b"
+    model: str = MODEL
 
     class Config:
-        arbitrary_types_allowed=True
+        arbitrary_types_allowed = True
+
+    def _get_openai_client(self) -> OpenAI:
+        base_url = os.getenv("BASE_URL")
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        if not api_key:
+            raise ValueError("Missing DEEPSEEK_API_KEY")
+        if not base_url:
+            raise ValueError("Missing BASE_URL")
+        return OpenAI(base_url=base_url, api_key=api_key)
 
     def run(self, *, file_bytes: bytes, file_name: str, doc_type: str) -> ParseResult:
-        file_name_splits = file_name.split(".")
-        with httpx.Client(base_url="http://localhost:8001") as client:
+        if not MINERU_BASE_URL:
+            raise ValueError("Missing MINERU_BASE_URL")
+
+        with httpx.Client(base_url=MINERU_BASE_URL) as client:
             response = client.post(
                 "/file_parse",
                 files={
@@ -88,6 +86,7 @@ class ParseService(BaseModel):
                 },
                 timeout=1000,
             )
+            response.raise_for_status()
             resp = MinerUParse.model_validate(response.json())
 
             # Get the first index
@@ -103,7 +102,8 @@ class ParseService(BaseModel):
         )
     
     def _label(self, full_text: str):
-        repo_labels:List[Labels] = select_labels()
+
+        repo_labels: List[Labels] = select_labels()
         available_labels = []
         for label in repo_labels:
             name = label.top_label
@@ -114,7 +114,8 @@ class ParseService(BaseModel):
                 """)
             )
 
-        completions = self.openai_client.chat.completions.create(
+        client = self._get_openai_client()
+        completions = client.chat.completions.create(
             model=self.model,
             messages=[
                 {"role": "system", "content": system_prompt.format(available_labels=available_labels)},
@@ -123,9 +124,4 @@ class ParseService(BaseModel):
         )
 
         response = completions.choices[0].message.content
-        if "qwen3" in self.model:
-            import re
-            response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
-            response:str = response.strip()
-
         return response

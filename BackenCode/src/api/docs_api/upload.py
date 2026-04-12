@@ -1,5 +1,6 @@
 from __future__ import annotations
-
+import logging
+import httpx
 import inspect
 import os
 from pathlib import Path
@@ -15,6 +16,7 @@ from .schemas import ParseResponse
 from ..schemas import ResponseModel
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "data/uploads"))
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -37,7 +39,17 @@ async def parse_doc(
         )
         if inspect.isawaitable(parse_result):
             parse_result = await parse_result
+    except httpx.TimeoutException as exc:
+        logger.exception("MinerU request timeout")
+        raise HTTPException(status_code=504, detail="MinerU parse timeout.") from exc
+    except httpx.HTTPStatusError as exc:
+        logger.exception("MinerU returned bad status")
+        raise HTTPException(status_code=502, detail="MinerU service error.") from exc
+    except httpx.RequestError as exc:
+        logger.exception("Cannot connect to MinerU")
+        raise HTTPException(status_code=502, detail="Cannot connect to MinerU.") from exc
     except Exception as exc:
+        logger.exception("Document parsing failed unexpectedly")
         raise HTTPException(status_code=500, detail="Document parsing failed.") from exc
 
     normalized = _normalize_parse_result(parse_result)
