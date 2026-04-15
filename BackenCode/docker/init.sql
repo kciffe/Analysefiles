@@ -25,7 +25,6 @@ create table file_metadata
     authors       varchar(255),
     institutions  varchar(255),
     publish_year  timestamp,
-    publish_venue varchar(64)                         not null,
     keywords      jsonb     default '[]'::jsonb,
     abstract      text,
     language      varchar(32),

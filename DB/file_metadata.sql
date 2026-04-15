@@ -28,7 +28,6 @@ CREATE TABLE "public"."file_metadata" (
   "authors" varchar(255) COLLATE "pg_catalog"."default",
   "institutions" varchar(255) COLLATE "pg_catalog"."default",
   "publish_year" timestamp(6),
-  "publish_venue" varchar(64) COLLATE "pg_catalog"."default" NOT NULL,
   "keywords" jsonb DEFAULT '[]'::jsonb,
   "abstract" text COLLATE "pg_catalog"."default",
   "language" varchar(32) COLLATE "pg_catalog"."default",
