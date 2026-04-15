@@ -24,7 +24,7 @@ CREATE TABLE "public"."file_resource" (
   "id" int4 NOT NULL,
   "path" varchar(256) COLLATE "pg_catalog"."default" NOT NULL,
   "name" varchar(128) COLLATE "pg_catalog"."default" NOT NULL,
-  "type" varchar(16) COLLATE "pg_catalog"."default",
+  "type" varchar(16) COLLATE "pg_catalog"."default",                # paper / patent / tech_report / survey
   "source" varchar(64) COLLATE "pg_catalog"."default" NOT NULL,
   "created_time" timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP
 )
