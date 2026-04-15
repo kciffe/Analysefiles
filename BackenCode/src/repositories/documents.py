@@ -11,10 +11,6 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 from .base import Base
 
 DEFAULT_SOURCE = "upload"
-DEFAULT_PUBLISH_VENUE = "unknown"
-
-
-
 # 文件原始资源
 class FileResource(Base):
     __tablename__ = "file_resource"
@@ -39,7 +35,6 @@ class FileMetadata(Base):
     authors: Mapped[str | None] = mapped_column(String(255))
     institutions: Mapped[str | None] = mapped_column(String(255))
     publish_year: Mapped[datetime | None] = mapped_column(DateTime)
-    publish_venue: Mapped[str] = mapped_column(String(64))
     keywords: Mapped[list[str]] = mapped_column(JSONB, default=list)
     abstract: Mapped[str | None] = mapped_column(Text)
     language: Mapped[str | None] = mapped_column(String(32))
@@ -109,7 +104,8 @@ def store_parsed_document(
         id=ids.file_resource_id,
         path=file_path,
         name=file_name,
-        type=doc_type,
+        # Reserved for future model-based classification.
+        type=None,
         source=normalized_metadata["source"],
     )
     file_metadata = FileMetadata(
@@ -120,7 +116,6 @@ def store_parsed_document(
         authors=normalized_metadata["authors"],
         institutions=normalized_metadata["institutions"],
         publish_year=normalized_metadata["publish_year"],
-        publish_venue=normalized_metadata["publish_venue"],
         keywords=normalized_metadata["keywords"],
         abstract=normalized_metadata["abstract"],
         language=normalized_metadata["language"],
@@ -304,7 +299,6 @@ def _normalize_metadata(
     authors = _stringify_list(values.get("authors"))
     institutions = _stringify_list(values.get("institutions"))
     publish_year = _normalize_publish_year(values.get("publish_year"))
-    publish_venue = str(values.get("publish_venue") or DEFAULT_PUBLISH_VENUE)
     keywords = _normalize_keywords(values.get("keywords"))
     abstract = _stringify_value(values.get("abstract"))
     language = _stringify_value(values.get("language"))
@@ -315,7 +309,6 @@ def _normalize_metadata(
         "authors": authors,
         "institutions": institutions,
         "publish_year": publish_year,
-        "publish_venue": publish_venue,
         "keywords": keywords,
         "abstract": abstract,
         "language": language,
@@ -377,4 +370,6 @@ def _normalize_publish_year(value: Any) -> datetime | None:
             if 1 <= year <= 9999:
                 return datetime(year, 1, 1)
     return None
+
+
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import os
 from typing import Iterator
 
 from sqlalchemy import create_engine
@@ -26,7 +27,7 @@ _engine: Engine = create_engine(
     DATABASE_URL_SYNC,
     pool_size=10,
     max_overflow=20,
-    echo=True,
+    echo=os.getenv("SQLALCHEMY_ECHO", "false").lower() == "true",
 )
 
 _sessionmaker: sessionmaker | None = None
