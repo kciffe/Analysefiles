@@ -87,7 +87,6 @@ def store_parsed_document(
     *,
     file_path: str,
     file_name: str,
-    doc_type: str | None,
     full_text: str,
     structure_info: Mapping[str, Any],
     metadata: Mapping[str, Any] | None,

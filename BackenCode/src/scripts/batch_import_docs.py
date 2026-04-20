@@ -27,8 +27,6 @@ from src.repositories.documents import (
 
 DEFAULT_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt", ".md"}
 DEFAULT_SOURCE = "arxiv"
-DEFAULT_DOC_TYPE = "arxiv"
-DEFAULT_PUBLISH_VENUE = "arXiv预印本"
 UNIQUE_SOURCE_TITLE_CONSTRAINT = "uq_file_metadata_source_title"
 
 
@@ -49,24 +47,9 @@ def parse_args() -> argparse.Namespace:
         help="Override MINERU_BASE_URL from .env, e.g. http://127.0.0.1:18081",
     )
     parser.add_argument(
-        "--doc-type",
-        default=DEFAULT_DOC_TYPE,
-        help="Deprecated: no effect. file_resource.type is currently left NULL.",
-    )
-    parser.add_argument(
-        "--publish-venue",
-        default=DEFAULT_PUBLISH_VENUE,
-        help="Deprecated: no effect. file_metadata table no longer has publish_venue column.",
-    )
-    parser.add_argument(
         "--recursive",
         action="store_true",
         help="Recursively scan all sub-directories.",
-    )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Deprecated: no effect. Path-based dedupe is disabled.",
     )
     parser.add_argument(
         "--refresh-existing",
@@ -255,7 +238,7 @@ def build_structure_info(full_text: str) -> dict[str, Any]:
 
 
 def extract_metadata(
-    *, full_text: str, file_name: str, source: str, publish_venue: str
+    *, full_text: str, file_name: str, source: str
 ) -> dict[str, Any]:
     lines = [line.strip() for line in full_text.splitlines()]
     non_empty_lines = [line for line in lines if line]
@@ -273,7 +256,6 @@ def extract_metadata(
         "authors": authors,
         "institutions": institutions,
         "publish_year": publish_year,
-        "publish_venue": publish_venue,
         "keywords": keywords,
         "abstract": abstract,
         "language": language,
@@ -634,7 +616,6 @@ def main() -> None:
                 full_text=full_text,
                 file_name=path.name,
                 source=args.source,
-                publish_venue=args.publish_venue,
             )
             structure_info = build_structure_info(full_text)
 
@@ -657,7 +638,6 @@ def main() -> None:
                     session,
                     file_path=path_str,
                     file_name=path.name,
-                    doc_type=args.doc_type,
                     full_text=full_text,
                     structure_info=structure_info,
                     metadata=metadata,
