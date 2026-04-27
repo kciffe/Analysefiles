@@ -13,6 +13,7 @@ def _parse_plan_array(text: str) -> list[ReTrievalPlan]:
 
     try:
         data = json.loads(text)
+
         return [ReTrievalPlan(**plan) for plan in data] if isinstance(data, list) else []
     except Exception:
         pass
@@ -33,7 +34,9 @@ def generate_evidence_agent(parse_workflow_state: ParseWorkFlowState) -> list[Re
     print("\n⚠️ 进入 : generate_evidence_agent")
 
     llm = get_llm_without_tools()
+    from .prompt import _EVALUATION_RUBRIC
     prompt = _GENERATE_EVIDENCE_PROMPT.format(
+        evaluation_rubric=_EVALUATION_RUBRIC,
         requirement=parse_workflow_state["requirement"],
         candidate_documents=json.dumps(parse_workflow_state.get("candidate_documents", []), ensure_ascii=False),
     )
@@ -44,6 +47,7 @@ def generate_evidence_agent(parse_workflow_state: ParseWorkFlowState) -> list[Re
             HumanMessage(content=prompt),
         ]
     )
+
 
     content = result.content if isinstance(result.content, str) else str(result.content)
     plans = _parse_plan_array(content)

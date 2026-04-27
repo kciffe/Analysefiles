@@ -266,6 +266,141 @@ def _normalize_heading(line: str) -> str:
     return line.lstrip("#").strip()
 
 
+def _has_section_number_prefix(line: str) -> bool:
+    text = _normalize_heading(line)
+    return bool(re.match(r"^(?:section\s+)?\d+(?:\.\d+)*[.)]?\s+", text, flags=re.IGNORECASE))
+
+
+def _normalize_metadata_text(line: str) -> str:
+    text = _normalize_heading(line)
+    # MinerU text sometimes contains mojibake separators between authors.
+    text = re.sub(r"[†‡§•·|]", ", ", text)
+    text = re.sub(r"[^\w\s,;:/@.\-\(\)\[\]\u4e00-\u9fff]", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip(" ,;")
+
+
+def _cleanup_people_text(line: str) -> str:
+    text = _normalize_metadata_text(line)
+    text = re.sub(r"\s*,\s*", ", ", text)
+    text = re.sub(r"(,\s*){2,}", ", ", text)
+    text = re.sub(r"\s{2,}", " ", text)
+    return text.strip(" ,;")
+
+
+def _is_front_matter_break(line: str) -> bool:
+    lowered = _normalize_heading(line).lower().strip().strip(":")
+    if lowered in {"abstract", "# abstract"}:
+        return True
+    return bool(
+        re.match(
+            r"^(?:#\s*)?(?:\d+(?:\.\d+)*)\s+"
+            r"(abstract|introduction|related work|background|method|methodology|"
+            r"experiments?|results?|analysis|conclusion|references)\b",
+            lowered,
+        )
+    )
+
+
+def _split_institution_segments(line: str) -> list[str]:
+    text = _normalize_metadata_text(line)
+    if not text:
+        return []
+
+    markers = list(re.finditer(r"(?<!\w)\d+\s*(?=[A-Za-z])", text))
+    if len(markers) >= 2:
+        parts: list[str] = []
+        for idx, marker in enumerate(markers):
+            start = marker.end()
+            end = markers[idx + 1].start() if idx + 1 < len(markers) else len(text)
+            piece = text[start:end].strip(" ,;")
+            if piece:
+                parts.append(piece)
+        if parts:
+            return parts
+
+    # Split trailing-affiliation-index style:
+    # "University of A ...1 Carnegie Mellon University2"
+    numbered_parts = [part.strip(" ,;") for part in re.split(r"(?<=\d)\s+(?=[A-Z])", text) if part.strip()]
+    if len(numbered_parts) >= 2:
+        cleaned = [re.sub(r"(?<=\D)\d+\s*$", "", part).strip(" ,;") for part in numbered_parts]
+        cleaned = [part for part in cleaned if part]
+        if cleaned:
+            return cleaned
+
+    # Split cases like: "University of X ...1 Carnegie Mellon University2"
+    token_markers = list(
+        re.finditer(
+            r"\b(?:department|university|college|institute|laboratory|lab|school|faculty|academy|corporation|company)\b",
+            text,
+            flags=re.IGNORECASE,
+        )
+    )
+    if len(token_markers) >= 2:
+        parts: list[str] = []
+        for idx, marker in enumerate(token_markers):
+            start = marker.start()
+            end = token_markers[idx + 1].start() if idx + 1 < len(token_markers) else len(text)
+            piece = re.sub(r"(?<=\D)\d+\s*$", "", text[start:end]).strip(" ,;")
+            if piece:
+                parts.append(piece)
+        if parts:
+            return parts
+
+    return [part.strip() for part in re.split(r";|\s+\|\s+", text) if part.strip()]
+
+
+def _is_sentence_like_text(line: str) -> bool:
+    text = _normalize_metadata_text(line)
+    words = re.findall(r"[A-Za-z]+", text)
+    if len(words) < 8:
+        return False
+    if re.search(r"[.!?]", text):
+        return True
+    stopword_hits = sum(
+        1
+        for w in words
+        if w.lower()
+        in {
+            "the",
+            "a",
+            "an",
+            "and",
+            "or",
+            "to",
+            "of",
+            "for",
+            "with",
+            "on",
+            "in",
+            "at",
+            "from",
+            "that",
+            "this",
+            "these",
+            "those",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "has",
+            "have",
+            "had",
+            "we",
+            "our",
+            "their",
+            "its",
+            "into",
+            "via",
+            "using",
+        }
+    )
+    return stopword_hits >= max(4, len(words) // 4)
+
+
 def _is_generic_section_title(line: str) -> bool:
     lowered = line.lower().strip().strip(":")
     generic = {
@@ -277,20 +412,41 @@ def _is_generic_section_title(line: str) -> bool:
         "appendix",
         "acknowledgements",
         "acknowledgments",
+        "related work",
+        "background",
+        "background and preliminaries",
+        "background and preliminary",
+        "preliminaries",
+        "preliminary",
+        "preliminary study",
+        "motivation",
+        "methodology",
+        "experiments",
+        "analysis",
+        "conclusion",
+        "limitations",
+        "ethical considerations",
     }
     if lowered in generic:
         return True
     return bool(
         re.match(
-            r"^(?:\d+(?:\.\d+)*)\s+(abstract|keywords|index terms|introduction|references|appendix)$",
+            r"^(?:\d+(?:\.\d+)*)\s+"
+            r"(abstract|keywords|index terms|introduction|related work|background|"
+            r"preliminaries?|preliminary(?: study)?|motivation|methodology|"
+            r"experiments?|analysis|conclusion|references|appendix|limitations?)$",
             lowered,
         )
     )
 
 
 def is_probable_author_line(line: str) -> bool:
-    text = _normalize_heading(line)
+    text = _normalize_metadata_text(line)
     if not text or len(text) > 255:
+        return False
+    if _has_section_number_prefix(text):
+        return False
+    if _is_sentence_like_text(text):
         return False
     if looks_like_institution(text):
         return False
@@ -301,16 +457,48 @@ def is_probable_author_line(line: str) -> bool:
 
     english_name_hits = len(
         re.findall(
-            r"\b[A-Z][a-z]+(?:[-'][A-Z][a-z]+)?\s+[A-Z][a-z]+(?:[-'][A-Z][a-z]+)?\b",
+            r"[A-Z][A-Za-z'.-]{0,30}\d{0,2}\*?\s+"
+            r"[A-Z][A-Za-z'.-]{0,30}\d{0,2}\*?(?=$|[^A-Za-z])",
             text,
         )
     )
     chinese_name_hits = len(re.findall(r"[\u4e00-\u9fff]{2,4}", text))
-    affiliation_marks = sum(text.count(ch) for ch in ("†", "‡", "*", "§", "¶"))
+    affiliation_marks = sum(text.count(ch) for ch in ("*", "†", "‡", "§", "^"))
     connector_hits = len(
         re.findall(r"\b(of|for|with|in|on|via|towards|from|to|using|the|a|an)\b", text.lower())
     )
     comma_count = text.count(",")
+    words = re.findall(r"[A-Za-z]+", text.lower())
+
+    title_hints = {
+        "language",
+        "model",
+        "models",
+        "retrieval",
+        "reasoning",
+        "tool",
+        "tools",
+        "survey",
+        "towards",
+        "via",
+        "introduction",
+        "abstract",
+        "benchmark",
+        "agent",
+        "agents",
+        "research",
+        "learning",
+        "knowledge",
+        "intensive",
+        "framework",
+        "system",
+        "methods",
+        "method",
+        "approach",
+    }
+    hint_hits = sum(1 for w in words if w in title_hints)
+    if hint_hits >= 2 and english_name_hits <= 2:
+        return False
 
     if english_name_hits >= 3 and affiliation_marks > 0:
         return True
@@ -319,29 +507,6 @@ def is_probable_author_line(line: str) -> bool:
         return True
     # Fallback for plain name lists without commas/symbols.
     if english_name_hits >= 3 and comma_count == 0 and affiliation_marks == 0:
-        words = re.findall(r"[A-Za-z]+", text.lower())
-        title_hints = {
-            "language",
-            "model",
-            "models",
-            "retrieval",
-            "reasoning",
-            "tool",
-            "tools",
-            "survey",
-            "towards",
-            "via",
-            "introduction",
-            "abstract",
-            "benchmark",
-            "agent",
-            "agents",
-            "research",
-            "learning",
-            "knowledge",
-            "intensive",
-        }
-        hint_hits = sum(1 for w in words if w in title_hints)
         if hint_hits <= 1 and len(words) <= 20:
             return True
     if chinese_name_hits >= 3 and connector_hits <= 1:
@@ -353,7 +518,11 @@ def is_probable_title_line(line: str) -> bool:
     text = _normalize_heading(line)
     if not (5 <= len(text) <= 256):
         return False
+    if _has_section_number_prefix(text):
+        return False
     if _is_generic_section_title(text):
+        return False
+    if _is_sentence_like_text(text):
         return False
     if looks_like_institution(text):
         return False
@@ -365,18 +534,30 @@ def is_probable_title_line(line: str) -> bool:
 
 
 def extract_title(non_empty_lines: list[str], file_name: str) -> str:
-    heading_candidates = [_normalize_heading(line) for line in non_empty_lines[:60] if line.startswith("#")]
-    for candidate in heading_candidates:
+    # Prefer the very first markdown heading as title.
+    for line in non_empty_lines[:200]:
+        if not line.startswith("#"):
+            continue
+        candidate = _normalize_heading(line)
+        if candidate:
+            return candidate[:256]
+
+    plain_candidates = [_normalize_heading(line) for line in non_empty_lines[:100] if not line.startswith("#")]
+    for candidate in plain_candidates:
         if is_probable_title_line(candidate):
             return candidate
 
-    for line in non_empty_lines[:30]:
+    for line in non_empty_lines[:60]:
         if is_probable_title_line(line):
             return _normalize_heading(line)
 
-    for line in non_empty_lines[:30]:
+    for line in non_empty_lines[:60]:
         candidate = _normalize_heading(line)
-        if 3 <= len(candidate) <= 256 and not _is_generic_section_title(candidate):
+        if (
+            3 <= len(candidate) <= 256
+            and not _is_generic_section_title(candidate)
+            and not _has_section_number_prefix(candidate)
+        ):
             return candidate
 
     return Path(file_name).stem[:256]
@@ -386,7 +567,7 @@ def extract_abstract(lines: list[str]) -> str | None:
     marker_indices = []
     for idx, line in enumerate(lines):
         normalized = line.lower().strip().strip(":")
-        if normalized in {"# abstract", "abstract", "摘要", "# 摘要"}:
+        if normalized in {"# abstract", "abstract", "鎽樿", "# 鎽樿"}:
             marker_indices.append(idx)
     for idx in marker_indices:
         chunks: list[str] = []
@@ -406,7 +587,7 @@ def extract_abstract(lines: list[str]) -> str | None:
 
 def extract_keywords(lines: list[str]) -> list[str]:
     marker_regex = re.compile(
-        r"^\s*(?:#+\s*)?(?:\*\*|__)?(keywords?|key words|index terms|关键词)"
+        r"^\s*(?:#+\s*)?(?:\*\*|__)?(?:keywords?|key words|index terms|关键词)"
         r"(?:\*\*|__)?\s*(?:[:：\-—]\s*)?(.*)\s*$",
         re.IGNORECASE,
     )
@@ -451,18 +632,18 @@ def _split_keywords_text(text: str) -> list[str]:
         normalized,
         flags=re.IGNORECASE,
     )
-    normalized = normalized.strip(" \t:：-—–;；,.。")
+    normalized = normalized.strip(" \t:：-—.;,，。；")
     if not normalized:
         return []
 
-    raw_parts = re.split(r"[;,，、；|/]|(?:\s+-\s+)|(?:\s+•\s+)|(?:\s+\|\s+)", normalized)
+    raw_parts = re.split(r"[;,，；、/|]|(?:\s+-\s+)|(?:\s+\|\s+)", normalized)
     cleaned: list[str] = []
     for part in raw_parts:
-        value = part.strip(" \t:：-—–;；,.。")
+        value = part.strip(" \t:：-—.;,，。；")
         value = re.sub(r"^[^\w\u4e00-\u9fff]+", "", value)
         if not value:
             continue
-        if len(value.split()) > 12 and not re.search(r"[,;，、|/]", normalized):
+        if len(value.split()) > 12 and not re.search(r"[,;，；/]", normalized):
             return []
         if value.lower() in {"keywords", "keyword", "index terms", "key words", "关键词"}:
             continue
@@ -480,36 +661,57 @@ def _split_keywords_text(text: str) -> list[str]:
 
 
 def extract_authors_and_institutions(lines: list[str], title: str) -> tuple[str | None, str | None]:
-    title_norm = _normalize_heading(title)
+    title_norm = _normalize_metadata_text(title).lower()
     start = 0
     if title_norm:
         for i, line in enumerate(lines):
-            if title_norm and title_norm in _normalize_heading(line):
+            current = _normalize_metadata_text(line).lower()
+            if title_norm == current or title_norm in current or current in title_norm:
                 start = i
                 break
 
-    window = [line.strip() for line in lines[start + 1 : start + 25] if line.strip()]
-    authors: str | None = None
+    end = min(len(lines), start + 60)
+    for i in range(start + 1, min(len(lines), start + 80)):
+        if _is_front_matter_break(lines[i]):
+            end = i
+            break
+
+    window = [line.strip() for line in lines[start + 1 : end] if line.strip()]
+    author_candidates: list[str] = []
     institutions: list[str] = []
 
     for line in window:
-        normalized = _normalize_heading(line)
-        lowered = line.lower()
-        if "abstract" in lowered or line.startswith("#"):
-            break
-        if authors is None and looks_like_authors(normalized):
-            authors = normalized[:255]
+        normalized = _normalize_metadata_text(line)
+        if not normalized:
             continue
-        if looks_like_institution(normalized):
-            institutions.append(normalized)
+        lowered = line.lower()
+        if "abstract" in lowered:
+            break
+        if "@" in normalized:
+            continue
+        if looks_like_authors(normalized):
+            author_candidates.append(normalized)
+            continue
+        for segment in _split_institution_segments(normalized):
+            if looks_like_institution(segment):
+                institutions.append(segment)
+
+    authors = None
+    if author_candidates:
+        selected = max(author_candidates, key=lambda item: (len(re.findall(r"[A-Z][A-Za-z'.-]*", item)), len(item)))
+        authors = _cleanup_people_text(selected)[:255]
 
     institutions_text = "; ".join(dict.fromkeys(institutions))[:255] if institutions else None
     return authors, institutions_text
 
 
 def looks_like_authors(line: str) -> bool:
-    text = _normalize_heading(line)
+    text = _normalize_metadata_text(line)
     if len(text) > 255:
+        return False
+    if _has_section_number_prefix(text):
+        return False
+    if _is_sentence_like_text(text):
         return False
     if looks_like_institution(text):
         return False
@@ -530,14 +732,18 @@ def looks_like_institution(line: str) -> bool:
         "laboratory",
         "lab",
         "school",
-        "大学",
-        "学院",
-        "研究所",
-        "实验室",
-        "研究院",
+        "department",
+        "faculty",
+        "academy",
+        "corporation",
+        "corp",
+        "inc",
+        "company",
+        "research center",
+        "research lab",
     ]
-    lowered = line.lower()
-    return any(token in lowered or token in line for token in tokens)
+    lowered = _normalize_metadata_text(line).lower()
+    return any(token in lowered for token in tokens)
 
 
 def extract_publish_year(full_text: str, file_name: str) -> datetime | None:
@@ -698,3 +904,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
