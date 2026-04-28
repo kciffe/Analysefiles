@@ -24,7 +24,7 @@ uv run uvicorn src.api.main:app --reload --env-file .env
 启动参数第一个位置为输入目录路径：
 ```bash
 uv run python -m src.scripts.batch_import_docs "D:\\8\Desktop\\论文\\paper\\over" --source arxiv
-uv run python -m src.scripts.batch_import_docs "D:\\8\Desktop\\1" --source arxiv  
+uv run python -m src.scripts.batch_import_docs "D:\\8\\Desktop\\论文\\paper\\over" --source arxiv  
 ```
 
 常用参数：
