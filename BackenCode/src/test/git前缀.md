@@ -43,7 +43,7 @@ git remote add origin https://github.com/kciffe/agentTest.git
 
 # 创建并切换分支
 git switch -c dev
-git push -u origin dev
+git push -u origin dev // -u 表示设置默认的远程分支,全称--set-upstream
 
 # 查看远程分支
 git branch -r
@@ -60,14 +60,14 @@ get switch main
 git merge origin/dev
 
 # Tag
-git checkout main
-git push origin main
-git tag -a v0.3 -m "Release v0.3"
+git switch main 
+git push origin main  #注意 很重要
+git tag -a v0.3 -m "Release v0.3" 
 git push origin v0.3
 
 # 切换对应Tag
 git fetch --all --tags
-git checkout v0.31
+git switch v0.31
 
 # 查看Tags
 git fetch --tags
