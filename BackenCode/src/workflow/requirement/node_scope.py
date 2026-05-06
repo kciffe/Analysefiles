@@ -1,17 +1,22 @@
 from datetime import datetime
-from langchain.chat_models import init_chat_model
+
 from typing_extensions import Literal
 from langgraph.types import Command
 from langgraph.graph import StateGraph,END,START
 from langchain_core.messages import SystemMessage,HumanMessage,AIMessage,get_buffer_string
 from src.workflow.requirement.state_scope import AgentState,ClarifyWithUser,ResearchQuestion
 from src.workflow.requirement.agent.prompt import CLARIFY_WITH_USER_INSTRUCTIONS,GENERATE_RESEARCH_BRIEF
+from src.agent.requirement.llm import get_llm,get_llm_without_tools
 def get_today_str() -> str:
     """获得当前人类可读的日期字符串"""
     return datetime.now().strftime("%a %b %d, %Y").replace(" 0", " ")
 
+
+def render_prompt(template: str, *, messages: str, date: str) -> str:
+    return template.replace("{messages}", messages).replace("{date}", date)
+
 # LLM
-model = init_chat_model(model="deepseek-chat",temperature=0.0)
+model = get_llm_without_tools()
 
 # Nodes
 def clarify_with_user(state:AgentState)->Command[Literal["write_research_brief","__end__"]]:
@@ -31,7 +36,8 @@ def clarify_with_user(state:AgentState)->Command[Literal["write_research_brief",
     # get_buffer_string用于将langchain的格式化消息列表转化为string
     response=structured_output_model.invoke([
         HumanMessage(
-            content=CLARIFY_WITH_USER_INSTRUCTIONS.format(
+            content=render_prompt(
+                CLARIFY_WITH_USER_INSTRUCTIONS,
                 messages=get_buffer_string(messages=state["messages"]),
                 date=get_today_str()
             )
@@ -62,7 +68,8 @@ def write_research_brief(state: AgentState) :
 
     response=struct_output_model.invoke([
         HumanMessage(
-            content=GENERATE_RESEARCH_BRIEF.format(
+            content=render_prompt(
+                GENERATE_RESEARCH_BRIEF,
                 messages=get_buffer_string(messages=state["messages"]),
                 date=get_today_str()
             )
