@@ -97,6 +97,16 @@
         </el-card>
       </div>
     </div>
+
+    <RequirementClearDrawer
+      v-model="clearDrawerVisible"
+      v-model:model-text="clarificationText"
+      mode="create"
+      :question="clarificationQuestion"
+      :original-requirement="form.detail"
+      :loading="submitting"
+      @submit="submitClarification"
+    />
   </div>
 </template>
 
@@ -107,6 +117,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { MagicStick } from '@element-plus/icons-vue'
 
+import RequirementClearDrawer from '@/components/RequirementClearDrawer.vue'
 import { parseRequirement } from '@/api/modules/requirementsApi'
 import {
   type RequirementCreateRequest,
@@ -140,6 +151,9 @@ const rules: FormRules = {
 
 const loading = ref(false)
 const submitting = ref(false)
+const clearDrawerVisible = ref(false)
+const clarificationQuestion = ref('')
+const clarificationText = ref('')
 
 function buildPayload(): RequirementCreateRequest {
   const [start, end] = form.dateRange ?? [undefined, undefined]
@@ -176,6 +190,13 @@ async function submit() {
     await formRef.value.validate()
 
     const resp = await parseRequirement(buildPayload())
+    if (resp?.need_clarification) {
+      clarificationQuestion.value = resp.question || ''
+      clarificationText.value = ''
+      clearDrawerVisible.value = true
+      return
+    }
+
     if (!resp?.id) {
       ElMessage.warning('后端未返回有效的需求 ID')
       return
@@ -189,6 +210,13 @@ async function submit() {
     loading.value = false
     submitting.value = false
   }
+}
+
+async function submitClarification(text: string) {
+  const originalDetail = form.detail.trim()
+  form.detail = `${originalDetail}\n\n补充说明：${text.trim()}`
+  clearDrawerVisible.value = false
+  await submit()
 }
 
 async function copyPreview() {

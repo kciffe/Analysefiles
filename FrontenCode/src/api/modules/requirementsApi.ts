@@ -12,11 +12,15 @@ interface RequirementCreateResponse {
   item: RequirementItem
 }
 
-interface RequirementParseResponse {
+export interface RequirementParseResponse {
   id: string
   name: string
   status: string
   createdAt: string
+  need_clarification?: boolean
+  question?: string
+  verification?: string
+  research_brief?: string
 }
 
 interface RequirementRunResponse {
@@ -88,6 +92,8 @@ export interface RequirementReportPayload {
   success?: boolean
   report?: RequirementReport
   reportMarkdown?: string
+  researchBrief?: string
+  research_brief?: string
 }
 
 export interface RequirementReportResponse {

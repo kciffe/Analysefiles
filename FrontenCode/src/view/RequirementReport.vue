@@ -9,6 +9,7 @@
           </div>
           <div class="header-actions">
             <el-tag v-if="waiting" type="warning" effect="plain">报告生成中</el-tag>
+            <el-button plain :icon="EditPen" @click="openModifyDrawer">修改需求</el-button>
             <el-button plain @click="goBack">返回列表</el-button>
           </div>
         </div>
@@ -32,6 +33,15 @@
     </el-card>
 
     <el-button class="publish-btn" type="primary">发布（功能暂留）</el-button>
+
+    <RequirementClearDrawer
+      v-model="modifyDrawerVisible"
+      v-model:model-text="modifyText"
+      mode="report"
+      :research-brief="currentResearchBrief"
+      :loading="modifying"
+      @submit="submitRequirementModify"
+    />
   </div>
 </template>
 
@@ -39,9 +49,11 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { EditPen } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import { API } from '@/api/endpoints'
 import { getRequirementReport, type RequirementReportResponse } from '@/api/modules/requirementsApi'
+import RequirementClearDrawer from '@/components/RequirementClearDrawer.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -61,9 +73,13 @@ const loading = ref(false)
 const waiting = ref(true)
 const reportReady = ref(false)
 const reportMarkdown = ref('')
+const currentResearchBrief = ref('')
 const errorText = ref('')
 const currentNode = ref('')
 const reachedStep = ref(0)
+const modifyDrawerVisible = ref(false)
+const modifyText = ref('')
+const modifying = ref(false)
 let sse: EventSource | null = null
 
 const requirementId = computed(() => String(route.params.id || ''))
@@ -96,6 +112,7 @@ function closeSSE() {
 function updateFromResult(data: RequirementReportResponse) {
   waiting.value = Boolean(data.waiting)
   reportMarkdown.value = (data.result?.reportMarkdown || '').trim()
+  currentResearchBrief.value = (data.result?.researchBrief || data.result?.research_brief || reportMarkdown.value || '').trim()
   reportReady.value = reportMarkdown.value.length > 0
   errorText.value = data.error || ''
 }
@@ -143,6 +160,27 @@ function connectSSE() {
 
   sse.onerror = () => {
     closeSSE()
+  }
+}
+
+function openModifyDrawer() {
+  modifyText.value = ''
+  modifyDrawerVisible.value = true
+}
+
+async function submitRequirementModify(text: string) {
+  modifying.value = true
+  try {
+    // 后续接入“修改需求 / 重新澄清 / 重新生成 Research Brief”接口时，在这里完成父页面 API 调用。
+    console.log('requirement modify payload', {
+      requirementId: requirementId.value,
+      researchBrief: currentResearchBrief.value,
+      modification: text,
+    })
+    ElMessage.info('修改内容已收到，等待后端接口接入重新分析流程')
+    modifyDrawerVisible.value = false
+  } finally {
+    modifying.value = false
   }
 }
 
