@@ -1,5 +1,6 @@
-from src.workflow.requirement.agent.prompt import CLARIFY_WITH_USER_INSTRUCTIONS
+from src.workflow.requirement.agent.prompt import CLARIFY_WITH_USER_INSTRUCTIONS,GENERATE_RESEARCH_BRIEF
 
 __all__ = [
     "CLARIFY_WITH_USER_INSTRUCTIONS",
+    "GENERATE_RESEARCH_BRIEF",
 ]

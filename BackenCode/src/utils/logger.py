@@ -13,9 +13,37 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_LOG_FILE = os.getenv("DEFAULT_LOG_FILE", "logs/app.log")
 DEFAULT_LOG_SIZE = os.getenv("DEFAULT_LOG_SIZE", "10MB")
 DEFAULT_LOG_BACKUP_COUNT = int(os.getenv("DEFAULT_LOG_BACKUP_COUNT", "10"))
-DEFAULT_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+DEFAULT_LOG_FORMAT = os.getenv("DEFAULT_LOG_FORMAT", "%(level_icon)s [%(levelname)s] %(message)s")
 DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+SUCCESS_LEVEL = 25
 _FILE_HANDLERS: dict[str, RotatingFileHandler] = {}
+
+logging.addLevelName(SUCCESS_LEVEL, "SUCCESS")
+
+
+def _success(self: logging.Logger, message: str, *args, **kwargs) -> None:
+    if self.isEnabledFor(SUCCESS_LEVEL):
+        self._log(SUCCESS_LEVEL, message, args, **kwargs)
+
+
+logging.Logger.success = _success  # type: ignore[attr-defined]
+
+
+class IconFormatter(logging.Formatter):
+    """Add a status icon before the logging level."""
+
+    LEVEL_ICONS = {
+        "DEBUG": "🐛",
+        "INFO": "ℹ️",
+        "SUCCESS": "✅",
+        "WARNING": "⚠️",
+        "ERROR": "❌",
+        "CRITICAL": "🚨",
+    }
+
+    def format(self, record: logging.LogRecord) -> str:
+        record.level_icon = self.LEVEL_ICONS.get(record.levelname, "")
+        return super().format(record)
 
 
 def _resolve_log_file(log_file: str | Path) -> Path:
@@ -69,7 +97,7 @@ def get_logger(
     log_path = _resolve_log_file(log_file)
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    formatter = logging.Formatter(DEFAULT_LOG_FORMAT, datefmt=DEFAULT_DATE_FORMAT)
+    formatter = IconFormatter(DEFAULT_LOG_FORMAT, datefmt=DEFAULT_DATE_FORMAT)
     handler_key = str(log_path.resolve())
 
     if not any(getattr(handler, "_handler_key", None) == "console" for handler in logger.handlers):
@@ -103,6 +131,10 @@ def log_info(message: str, *args, **kwargs) -> None:
     get_logger(_caller_logger_name()).info(message, *args, **kwargs)
 
 
+def log_success(message: str, *args, **kwargs) -> None:
+    get_logger(_caller_logger_name()).success(message, *args, **kwargs)
+
+
 def log_warning(message: str, *args, **kwargs) -> None:
     get_logger(_caller_logger_name()).warning(message, *args, **kwargs)
 
@@ -112,4 +144,3 @@ def log_error(message: str, *args, **kwargs) -> None:
 
 
 logger = get_logger("app")
-
