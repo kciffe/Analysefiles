@@ -44,7 +44,7 @@ def build_initial_state(
             # "clarification_question": None,
 
             "requirement": requirement_parse_request.detail,
-            "task_name": requirement_parse_request.name or item_id,
+            "task_name": item_id,     # 这个后续需要持久化到数据库中
             "search_document_request": request,
             "current_keywords": request.keywords or [],
             "retrieval_round": 0,

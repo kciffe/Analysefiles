@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from typing_extensions import Literal
-from langgraph.types import Command
+from langgraph.types import Command,interrupt
 from langgraph.graph import StateGraph,END,START
 from langchain_core.messages import SystemMessage,HumanMessage,AIMessage,get_buffer_string
 from src.workflow.requirement.state_scope import AgentState,ClarifyWithUser,ResearchQuestion
@@ -20,7 +20,7 @@ def render_prompt(template: str, *, messages: str, date: str) -> str:
 model = get_llm_without_tools()
 
 # Nodes
-def clarify_with_user(state:AgentState)->Command[Literal["write_research_brief","__end__"]]:
+def clarify_with_user(state:AgentState)->Command[Literal["write_research_brief","clarify_with_user"]]:
     """
     判断用户当前需求是否具备足够信息以进入生成结构化任务描述节点。
 
@@ -46,9 +46,16 @@ def clarify_with_user(state:AgentState)->Command[Literal["write_research_brief",
     ])
 
     if response.need_clarification:
+        user_answer=interrupt({
+            "question":response.question,
+            "type": "requirement_clarification"
+        })
         return Command(
-            goto=END, 
-            update={"messages": [AIMessage(content=response.question)]}
+            goto="clarify_with_user", 
+            update={"messages": [
+                AIMessage(content=response.question),
+                HumanMessage(content=user_answer),
+            ]}
         )
     else:
         return Command(

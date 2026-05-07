@@ -12,29 +12,65 @@ from ...agent.requirement import generate_evidence_agent
 from .state_scope import AgentState
 from src.workflow.requirement.graph_scope import requirement_scope_graph
 
-# 转换节点，切换到scope流程下进行用户需求澄清工作
-def convert_to_scope_node(workflow_state:ParseWorkFlowState)->ParseWorkFlowState:
-    req=workflow_state["search_document_request"]
-    contents=f"""
-        用户输入的需求如下:
-        {workflow_state["requirement"]}
+# 准备子图输入数据
+def prepare_scope_input_node(state: ParseWorkFlowState):
+    req = state["search_document_request"]
 
-        关键词:{req.keywords},
-        文档类型:{req.doc_types},
-        时间范围:{req.start_date} ~ {req.end_date}
+    content = f"""
+        用户需求：
+        {state["requirement"]}
+
+        检索条件：
+        关键词：{req.keywords}
+        文档类型：{req.doc_types}
+        时间范围：{req.start_date} ~ {req.end_date}
     """
-    res=requirement_scope_graph.invoke({
-        "messages":[
-            HumanMessage(
-                content=contents
-            )
-        ],
-    })
 
     return {
-        "requirement":res.get("research_brief"),
-        "current_step":"convert_to_scope_node", 
+        "messages": [HumanMessage(content=content)],
+        "current_step": "prepare_scope_input",
     }
+
+# scope生成子图数据写回主图
+def apply_scope_output_node(state: ParseWorkFlowState):
+    research_brief = state.get("research_brief")
+
+    return {
+        "requirement": research_brief,
+        "current_step": "apply_scope_output",
+    }
+
+# 转换节点，切换到scope流程下进行用户需求澄清工作
+# def convert_to_scope_node(workflow_state:ParseWorkFlowState)->ParseWorkFlowState:
+#     req=workflow_state["search_document_request"]
+#     scope_config={
+#         "configurable":{
+#             "thread_id":workflow_state["task_name"]
+#         }
+#     }
+#     contents=f"""
+#         用户输入的需求如下:
+#         {workflow_state["requirement"]}
+
+#         关键词:{req.keywords},
+#         文档类型:{req.doc_types},
+#         时间范围:{req.start_date} ~ {req.end_date}
+#     """
+#     res=requirement_scope_graph.invoke({
+#         "messages":[
+#             HumanMessage(
+#                 content=contents
+#             )
+#         ],
+        
+#     },
+#     config=scope_config
+#     )
+
+#     return {
+#         "requirement":res.get("research_brief"),
+#         "current_step":"convert_to_scope_node", 
+#     }
 
 def retrieval_documents_node(workflow_state: ParseWorkFlowState) -> ParseWorkFlowState:
     print("\n✅ 进入 : retrieval_documents_node")

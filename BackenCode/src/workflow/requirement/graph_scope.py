@@ -14,7 +14,6 @@ requirement_scope_builder.add_node("write_research_brief", write_research_brief)
 requirement_scope_builder.add_edge(START, "clarify_with_user")
 requirement_scope_builder.add_edge("write_research_brief", END)
 
-checkpointer = InMemorySaver()
-requirement_scope_graph = requirement_scope_builder.compile(checkpointer=checkpointer)
+requirement_scope_graph = requirement_scope_builder.compile()
 
 

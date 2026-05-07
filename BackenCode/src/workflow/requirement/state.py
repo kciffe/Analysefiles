@@ -13,20 +13,21 @@ class ParseWorkFlowState(TypedDict):
 
     messages:Annotated[list, add_messages]
     tool_traces: list[dict]                     # 每轮工具调用摘要
+    interrupt_payload: dict | None      # 中断的输入参数
 
     #===============
     # 澄清步骤
     #===============
-    # research_brief: str | None
-    # need_clarification: bool
-    # clarification_question: str | None
+    research_brief: str | None
+    need_clarification: bool
+    clarification_question: str | None
     # scope_messages: Annotated[list, add_messages] #用户澄清对话历史，这里暂不考虑保存
 
     #===============
     # 检索步骤
     #===============
     requirement: str                     # 用户需求
-    task_name: str                       # 任务名/日志任务标识
+    task_name: str                       # 任务名/日志任务标识 
     search_document_request: SearchDocumentsRequest | None # 检索工具的输入参数
 
     candidate_documents: list[RetrievedDocument]        # 本轮检索得到的候选文档

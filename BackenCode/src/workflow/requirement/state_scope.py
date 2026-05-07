@@ -23,8 +23,8 @@ class AgentState(MessagesState):
     """
     # 需求概述
     research_brief:Optional[str]
-    # 多 agent 之间的调度通信记录
-    supervisor_messages:Annotated[Sequence[BaseMessage],add_messages]
+    # 多 agent 之间的调度通信记录 暂时不需要
+    # supervisor_messages:Annotated[Sequence[BaseMessage],add_messages]
 
     # ....
 
