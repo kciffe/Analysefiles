@@ -37,7 +37,13 @@ def build_initial_state(
     return ParseWorkFlowState(
         {
             "messages": [],
-            "requirement": requirement_parse_request.detail or "",
+            "tool_traces":[],
+
+            # "research_brief": None,
+            # "need_clarification": False,
+            # "clarification_question": None,
+
+            "requirement": requirement_parse_request.detail,
             "task_name": requirement_parse_request.name or item_id,
             "search_document_request": request,
             "current_keywords": request.keywords or [],

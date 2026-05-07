@@ -9,10 +9,22 @@ from ...schemas.requirement_type import EvidenceSectionPair,SearchDocumentsReque
 class ParseWorkFlowState(TypedDict):
     """LangGraph 工作流的共享状态结构定义"""
 
+
+
     messages:Annotated[list, add_messages]
     tool_traces: list[dict]                     # 每轮工具调用摘要
 
+    #===============
+    # 澄清步骤
+    #===============
+    # research_brief: str | None
+    # need_clarification: bool
+    # clarification_question: str | None
+    # scope_messages: Annotated[list, add_messages] #用户澄清对话历史，这里暂不考虑保存
 
+    #===============
+    # 检索步骤
+    #===============
     requirement: str                     # 用户需求
     task_name: str                       # 任务名/日志任务标识
     search_document_request: SearchDocumentsRequest | None # 检索工具的输入参数

@@ -1,13 +1,13 @@
 ﻿from .state import ParseWorkFlowState
 from .nodes import *
 from ...tools import TOOLS
-
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
+from typing_extensions import Literal
 
 
 
-def router_after_tools(workflow_state: ParseWorkFlowState) -> str:
+def router_after_tools(workflow_state: ParseWorkFlowState) -> Literal["collect_retrieval_results","collect_read_sections_results"]:
     if workflow_state.get("current_step") == "retrieval_documents_node":
         return "collect_retrieval_results"
     return "collect_read_sections_results"
@@ -19,7 +19,7 @@ def build_requirement_graph():
     tool_node = ToolNode(TOOLS)
 
     builder.add_node("tools", tool_node)
-    builder.add_node("prepare_query", prepare_query_node)
+    builder.add_node("convert_to_scope", convert_to_scope_node)
     builder.add_node("retrieval_documents", retrieval_documents_node)
     builder.add_node("collect_retrieval_results", collect_retrieval_results_node)
     builder.add_node("generate_evidence", generate_evidence_node)
@@ -27,9 +27,9 @@ def build_requirement_graph():
     builder.add_node("collect_read_sections_results", collect_read_sections_node)
     builder.add_node("generate_report", generate_report_node)
 
-    builder.set_entry_point("prepare_query")
+    builder.set_entry_point("convert_to_scope")
 
-    builder.add_edge("prepare_query", "retrieval_documents")
+    builder.add_edge("convert_to_scope", "retrieval_documents")
     builder.add_edge("retrieval_documents", "tools")
     builder.add_edge("collect_retrieval_results", "generate_evidence")
     builder.add_edge("generate_evidence", "read_sections")

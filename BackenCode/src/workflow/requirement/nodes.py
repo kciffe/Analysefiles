@@ -2,22 +2,40 @@
 from datetime import datetime, date
 from uuid import uuid4
 
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage,HumanMessage
 
 from .state import ParseWorkFlowState
 from ...agent.requirement.report_generator import generate_report_agent
 from ...agent.requirement import generate_report_plans_agent
 from ...agent.requirement.prompt import _GENERATE_REPORT_PROMPT
 from ...agent.requirement import generate_evidence_agent
+from .state_scope import AgentState
+from src.workflow.requirement.graph_scope import requirement_scope_graph
 
-def prepare_query_node(workflow_state: ParseWorkFlowState) -> ParseWorkFlowState:
-    print("\n✅ 进入 : prepare_query_node")
+# 转换节点，切换到scope流程下进行用户需求澄清工作
+def convert_to_scope_node(workflow_state:ParseWorkFlowState)->ParseWorkFlowState:
+    req=workflow_state["search_document_request"]
+    contents=f"""
+        用户输入的需求如下:
+        {workflow_state["requirement"]}
+
+        关键词:{req.keywords},
+        文档类型:{req.doc_types},
+        时间范围:{req.start_date} ~ {req.end_date}
+    """
+    res=requirement_scope_graph.invoke({
+        "messages":[
+            HumanMessage(
+                content=contents
+            )
+        ],
+    })
+
     return {
-        "current_step": "prepare_query_node"
+        "requirement":res.get("research_brief"),
+        "current_step":"convert_to_scope_node", 
     }
 
-
-# 检索文档节点，调用工具函数 search_documents 进行检索，返回结果存储在 workflow_state.candidate_documents 中。
 def retrieval_documents_node(workflow_state: ParseWorkFlowState) -> ParseWorkFlowState:
     print("\n✅ 进入 : retrieval_documents_node")
     req = workflow_state["search_document_request"]

@@ -7,6 +7,7 @@ from langchain_core.messages import SystemMessage,HumanMessage,AIMessage,get_buf
 from src.workflow.requirement.state_scope import AgentState,ClarifyWithUser,ResearchQuestion
 from src.workflow.requirement.agent.prompt import CLARIFY_WITH_USER_INSTRUCTIONS,GENERATE_RESEARCH_BRIEF
 from src.agent.requirement.llm import get_llm,get_llm_without_tools
+
 def get_today_str() -> str:
     """获得当前人类可读的日期字符串"""
     return datetime.now().strftime("%a %b %d, %Y").replace(" 0", " ")
