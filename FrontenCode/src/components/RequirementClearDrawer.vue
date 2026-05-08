@@ -11,7 +11,7 @@
     <div class="chat-shell">
       <header class="chat-header">
         <div class="agent-mark">
-          <el-icon><MagicStick /></el-icon>
+          <el-icon><ChatRound /></el-icon>
         </div>
         <div class="header-main">
           <div class="title-row">
@@ -31,7 +31,7 @@
             <el-icon><Document /></el-icon>
             <span>当前 Research Brief</span>
           </div>
-          <div class="context-content">{{ researchBrief }}</div>
+          <div class="context-content markdown-content" v-html="renderMarkdown(researchBrief)" />
         </section>
 
         <div v-if="originalRequirement" class="message-row user">
@@ -41,20 +41,31 @@
           </div>
         </div>
 
-        <div class="message-row assistant">
+        <template v-if="normalizedMessages.length">
+          <div
+            v-for="(message, index) in normalizedMessages"
+            :key="`${message.role}-${index}`"
+            class="message-row"
+            :class="message.role === 'user' ? 'user' : 'assistant'"
+          >
+            <div v-if="message.role !== 'user'" class="avatar">
+              <el-icon><ChatRound /></el-icon>
+            </div>
+            <div class="bubble" :class="message.role === 'user' ? 'user-bubble' : 'assistant-bubble'">
+              <div class="bubble-label">{{ message.role === 'user' ? '你' : assistantLabel }}</div>
+              <div v-if="message.role === 'user'" class="bubble-content">{{ message.content }}</div>
+              <div v-else class="bubble-content markdown-content" v-html="renderMarkdown(message.content)" />
+            </div>
+          </div>
+        </template>
+
+        <div v-else class="message-row assistant">
           <div class="avatar">
             <el-icon><ChatRound /></el-icon>
           </div>
           <div class="bubble assistant-bubble">
             <div class="bubble-label">{{ assistantLabel }}</div>
-            <div class="bubble-content">{{ assistantMessageText }}</div>
-          </div>
-        </div>
-
-        <div v-if="draft.trim()" class="message-row user preview">
-          <div class="bubble user-bubble">
-            <div class="bubble-label">你的回复</div>
-            <div class="bubble-content">{{ draft }}</div>
+            <div class="bubble-content markdown-content" v-html="renderMarkdown(assistantMessageText)" />
           </div>
         </div>
       </main>
@@ -92,9 +103,14 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { ChatRound, Close, Document, MagicStick, Position } from '@element-plus/icons-vue'
+import { ChatRound, Close, Document, Position } from '@element-plus/icons-vue'
+import MarkdownIt from 'markdown-it'
 
 type DrawerMode = 'create' | 'report'
+type ChatMessage = {
+  role: string
+  content: string
+}
 
 const props = withDefaults(
   defineProps<{
@@ -103,6 +119,7 @@ const props = withDefaults(
     question?: string
     originalRequirement?: string
     researchBrief?: string
+    messages?: ChatMessage[]
     modelText?: string
     loading?: boolean
     maxLength?: number
@@ -112,6 +129,7 @@ const props = withDefaults(
     question: '',
     originalRequirement: '',
     researchBrief: '',
+    messages: () => [],
     modelText: '',
     loading: false,
     maxLength: 2000,
@@ -125,6 +143,7 @@ const emit = defineEmits<{
   close: []
 }>()
 
+const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 const draft = ref(props.modelText)
 const chatBodyRef = ref<HTMLElement | null>(null)
 
@@ -133,21 +152,28 @@ const titleText = computed(() => (isReportMode.value ? '修改需求' : '需求�
 const modeTag = computed(() => (isReportMode.value ? '报告调整' : '继续解析'))
 const subtitleText = computed(() =>
   isReportMode.value
-    ? '像对话一样描述你想调整的方向，父页面会接管后续重新澄清或重新生成流程。'
-    : '补充回答后，系统会继续判断需求是否足够明确。',
+    ? '像对话一样描述你想调整的方向，系统会基于你的回复继续处理。'
+    : '请回答澄清问题，需求明确后会继续生成报告。',
 )
 const assistantLabel = computed(() => (isReportMode.value ? '分析助手' : '需求澄清助手'))
 const assistantMessageText = computed(() => {
   if (props.question) return props.question
   return isReportMode.value
-    ? '请告诉我你对当前报告哪里不满意，或希望补充哪些分析维度。'
-    : '当前需求还需要补充一些关键信息。请说明分析目标、范围、数据来源偏好或输出要求。'
+    ? '请告诉我你希望如何调整当前报告。'
+    : '当前需求还需要补充一些关键信息，请说明分析目标、范围、数据来源偏好或输出要求。'
 })
 const placeholderText = computed(() =>
   isReportMode.value
     ? '例如：请补充近两年方法对比，并重点分析可复现性和工程成本。'
-    : '例如：我希望输出排名报告，数据来源不限，重点比较评分、热度和特色。'
+    : '例如：我希望输出排名报告，数据来源不限，重点比较评分、热度和特色。',
 )
+const normalizedMessages = computed(() => {
+  const messages = [...props.messages]
+  if (!messages.length && props.question) {
+    messages.push({ role: 'assistant', content: props.question })
+  }
+  return messages.filter((message) => message.content)
+})
 
 watch(
   () => props.modelText,
@@ -158,15 +184,18 @@ watch(
 
 watch(draft, (value) => {
   emit('update:modelText', value)
-  scrollToBottom()
 })
 
 watch(
-  () => props.modelValue,
-  (visible) => {
-    if (visible) scrollToBottom()
+  () => [props.modelValue, normalizedMessages.value.length],
+  () => {
+    scrollToBottom()
   },
 )
+
+function renderMarkdown(content: string) {
+  return md.render(content || '')
+}
 
 function scrollToBottom() {
   nextTick(() => {
@@ -270,8 +299,6 @@ function handleSubmit() {
 .context-content {
   max-height: 180px;
   overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
   color: #4b5563;
   font-size: 13px;
   line-height: 1.75;
@@ -289,10 +316,6 @@ function handleSubmit() {
 
 .message-row.user {
   justify-content: flex-end;
-}
-
-.message-row.preview {
-  opacity: 0.86;
 }
 
 .avatar {
@@ -330,10 +353,44 @@ function handleSubmit() {
 }
 
 .bubble-content {
-  white-space: pre-wrap;
   word-break: break-word;
   font-size: 14px;
   line-height: 1.75;
+}
+
+.user-bubble .bubble-content {
+  white-space: pre-wrap;
+}
+
+.markdown-content :deep(p),
+.markdown-content :deep(ol),
+.markdown-content :deep(ul) {
+  margin: 0 0 10px;
+}
+
+.markdown-content :deep(p:last-child),
+.markdown-content :deep(ol:last-child),
+.markdown-content :deep(ul:last-child) {
+  margin-bottom: 0;
+}
+
+.markdown-content :deep(ol),
+.markdown-content :deep(ul) {
+  padding-left: 20px;
+}
+
+.markdown-content :deep(li) {
+  margin: 4px 0;
+}
+
+.markdown-content :deep(strong) {
+  font-weight: 800;
+}
+
+.markdown-content :deep(code) {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(17, 24, 39, 0.08);
 }
 
 .composer-wrap {

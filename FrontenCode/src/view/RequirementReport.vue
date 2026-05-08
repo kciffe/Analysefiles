@@ -8,7 +8,7 @@
             <p>需求 ID：{{ requirementId }}</p>
           </div>
           <div class="header-actions">
-            <el-tag v-if="waiting" type="warning" effect="plain">报告生成中</el-tag>
+            <el-tag v-if="waiting" type="warning" effect="plain">{{ statusTagText }}</el-tag>
             <el-button plain :icon="EditPen" @click="openModifyDrawer">修改需求</el-button>
             <el-button plain @click="goBack">返回列表</el-button>
           </div>
@@ -37,7 +37,9 @@
     <RequirementClearDrawer
       v-model="modifyDrawerVisible"
       v-model:model-text="modifyText"
-      mode="report"
+      :mode="reportReady ? 'report' : 'create'"
+      :question="clarificationQuestion"
+      :messages="clarificationMessages"
       :research-brief="currentResearchBrief"
       :loading="modifying"
       @submit="submitRequirementModify"
@@ -52,7 +54,12 @@ import { ElMessage } from 'element-plus'
 import { EditPen } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import { API } from '@/api/endpoints'
-import { getRequirementReport, type RequirementReportResponse } from '@/api/modules/requirementsApi'
+import {
+  getRequirementReport,
+  sendRequirementMessage,
+  type RequirementChatMessage,
+  type RequirementReportResponse,
+} from '@/api/modules/requirementsApi'
 import RequirementClearDrawer from '@/components/RequirementClearDrawer.vue'
 
 const route = useRoute()
@@ -80,6 +87,8 @@ const reachedStep = ref(0)
 const modifyDrawerVisible = ref(false)
 const modifyText = ref('')
 const modifying = ref(false)
+const clarificationQuestion = ref('')
+const clarificationMessages = ref<RequirementChatMessage[]>([])
 let sse: EventSource | null = null
 
 const requirementId = computed(() => String(route.params.id || ''))
@@ -91,8 +100,14 @@ const reportTitle = computed(() => {
 })
 
 const currentNodeLabel = computed(() => {
+  if (clarificationQuestion.value && modifyDrawerVisible.value) return '等待用户澄清需求'
   const hit = STEPS.find((x) => x.key === currentNode.value)
   return hit?.title || (currentNode.value || '等待开始')
+})
+
+const statusTagText = computed(() => {
+  if (clarificationQuestion.value && modifyDrawerVisible.value) return '等待需求澄清'
+  return '报告生成中'
 })
 
 const activeStep = computed(() => {
@@ -110,11 +125,17 @@ function closeSSE() {
 }
 
 function updateFromResult(data: RequirementReportResponse) {
-  waiting.value = Boolean(data.waiting)
   reportMarkdown.value = (data.result?.reportMarkdown || '').trim()
   currentResearchBrief.value = (data.result?.researchBrief || data.result?.research_brief || reportMarkdown.value || '').trim()
   reportReady.value = reportMarkdown.value.length > 0
   errorText.value = data.error || ''
+  clarificationQuestion.value = data.clarificationQuestion || ''
+  clarificationMessages.value = data.messages || clarificationMessages.value
+  const isClarifying = Boolean(clarificationQuestion.value && !reportReady.value)
+  waiting.value = isClarifying ? true : Boolean(data.waiting)
+  if (clarificationQuestion.value && !reportReady.value) {
+    modifyDrawerVisible.value = true
+  }
 }
 
 async function fetchReport() {
@@ -148,6 +169,20 @@ function connectSSE() {
     ElMessage.error(errorText.value)
   })
 
+  sse.addEventListener('requirement_clarification', (ev) => {
+    const payload = JSON.parse((ev as MessageEvent).data)
+    const data = payload?.data || {}
+    const question = String(data.question || '')
+    clarificationQuestion.value = question
+    clarificationMessages.value = Array.isArray(data.messages) ? data.messages : clarificationMessages.value
+    if (question && !clarificationMessages.value.some((item) => item.role === 'assistant' && item.content === question)) {
+      clarificationMessages.value.push({ role: 'assistant', content: question })
+    }
+    waiting.value = true
+    modifyDrawerVisible.value = true
+    closeSSE()
+  })
+
   sse.addEventListener('result', async () => {
     await fetchReport()
   })
@@ -171,14 +206,21 @@ function openModifyDrawer() {
 async function submitRequirementModify(text: string) {
   modifying.value = true
   try {
-    // 后续接入“修改需求 / 重新澄清 / 重新生成 Research Brief”接口时，在这里完成父页面 API 调用。
-    console.log('requirement modify payload', {
-      requirementId: requirementId.value,
-      researchBrief: currentResearchBrief.value,
-      modification: text,
-    })
-    ElMessage.info('修改内容已收到，等待后端接口接入重新分析流程')
+    clarificationMessages.value.push({ role: 'user', content: text })
+    modifyText.value = ''
+
+    const resp = await sendRequirementMessage(requirementId.value, text)
+    if (resp.need_clarification) {
+      const question = resp.question || '请继续补充需求信息。'
+      clarificationQuestion.value = question
+      clarificationMessages.value.push({ role: 'assistant', content: question })
+      return
+    }
+
     modifyDrawerVisible.value = false
+    waiting.value = true
+    ElMessage.success('需求已明确，继续生成报告')
+    connectSSE()
   } finally {
     modifying.value = false
   }
