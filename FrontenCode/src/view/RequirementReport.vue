@@ -67,7 +67,8 @@ const router = useRouter()
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
 const STEPS = [
-  { key: 'prepare_query', title: '准备查询' },
+  { key: 'prepare_scope_input_node', title: '整理需求' },
+  { key: 'requirement_scope_graph', title: '需求澄清' },
   { key: 'retrieval_documents', title: '检索文档' },
   { key: 'collect_retrieval_results', title: '收集文档' },
   { key: 'generate_evidence', title: '生成证据计划' },
@@ -183,11 +184,22 @@ function connectSSE() {
     closeSSE()
   })
 
+  sse.addEventListener('state', (ev) => {
+    const payload = JSON.parse((ev as MessageEvent).data)
+    const data = payload?.data
+    if (data) updateFromResult(data as RequirementReportResponse)
+  })
+
   sse.addEventListener('result', async () => {
+    if (clarificationQuestion.value && modifyDrawerVisible.value) return
     await fetchReport()
   })
 
   sse.addEventListener('done', async () => {
+    if (clarificationQuestion.value && modifyDrawerVisible.value) {
+      closeSSE()
+      return
+    }
     await fetchReport()
     closeSSE()
     if (reportReady.value) ElMessage.success('报告生成完成')

@@ -37,7 +37,7 @@ def _build_result_payload(job: dict) -> RequirementParseResultQueryResponse:
     result = job.get("result") or None
     result_payload = RequirementParseResponse.model_validate(result) if result else None
     return RequirementParseResultQueryResponse(
-        waiting=status in {"received", "processing"},
+        waiting=status in {"received", "processing", "clarifying"},
         id=job["id"],
         name=job["name"],
         status=_STATUS_TO_API.get(status, "已失败"),

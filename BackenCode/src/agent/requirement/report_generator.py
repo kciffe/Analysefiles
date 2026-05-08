@@ -1,4 +1,4 @@
-﻿from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from .llm import get_llm
 
@@ -13,6 +13,5 @@ def generate_report_agent(prompt: str) -> str:
         )),
         HumanMessage(content=prompt),
     ])
-    res= response.content if isinstance(response.content, str) else str(response.content)
-    print(f"✅ 生成的报告内容：\n{res}")
+    res = response.content if isinstance(response.content, str) else str(response.content)
     return res

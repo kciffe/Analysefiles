@@ -11,6 +11,7 @@ from ...agent.requirement.prompt import _GENERATE_REPORT_PROMPT
 from ...agent.requirement import generate_evidence_agent
 from .state_scope import AgentState
 from src.workflow.requirement.graph_scope import requirement_scope_graph
+from src.utils import log_error, log_info, log_success, log_warning
 
 # 准备子图输入数据
 def prepare_scope_input_node(state: ParseWorkFlowState):
@@ -42,7 +43,7 @@ def apply_scope_output_node(state: ParseWorkFlowState):
     }
 
 def retrieval_documents_node(workflow_state: ParseWorkFlowState) -> ParseWorkFlowState:
-    print("\n✅ 进入 : retrieval_documents_node")
+    log_success("进入 : retrieval_documents_node")
     req = workflow_state["search_document_request"]
     return {
         "messages": [
@@ -68,7 +69,7 @@ def retrieval_documents_node(workflow_state: ParseWorkFlowState) -> ParseWorkFlo
 
 # 收集检索结果节点，从 messages 中找到最新的 search_documents 工具调用结果，并将文档列表存储在 workflow_state.candidate_documents 中。
 def collect_retrieval_results_node(workflow_state: ParseWorkFlowState) -> ParseWorkFlowState:
-    print("\n✅ 进入 : collect_retrieval_results_node")
+    log_success("进入 : collect_retrieval_results_node")
     messages = workflow_state.get("messages", [])
     docs = []
 
@@ -88,14 +89,14 @@ def collect_retrieval_results_node(workflow_state: ParseWorkFlowState) -> ParseW
             docs = parsed["data"]
         break
 
-    print(f"⚠️  检索到的候选文档：{docs}")
+    log_info(f"候选文档数量: {len(docs)}")
     return {
         "candidate_documents": docs,
         "current_step": "collect_retrieval_results_node",
     }
 # 分析需要哪些段落，并写出为啥需要阅读这些段落，生成 ReTrievalPlan “检索计划”列表，存储在 workflow_state.retrieval_plan 中。
 def generate_evidence_node(workflow_state: ParseWorkFlowState) -> ParseWorkFlowState:
-    print("\n✅ 进入 : generate_evidence_node")
+    log_success("进入 : generate_evidence_node")
     return {
         "retrieval_plan": generate_evidence_agent(workflow_state),
         "current_step": "generate_evidence_node"
@@ -103,10 +104,10 @@ def generate_evidence_node(workflow_state: ParseWorkFlowState) -> ParseWorkFlowS
 
 # 依据证据和所需要的段落调用工具检索，只发起调用工具
 def read_sections_node(workflow_state: ParseWorkFlowState) -> ParseWorkFlowState:
-    print("\n✅ 进入 : read_sections_node")
+    log_success("进入 : read_sections_node")
     plans = workflow_state.get("retrieval_plan") or []
     if not plans:
-        print("⚠️  retrieval_plan 为空，当前不会发起任何段落检索调用")
+        log_warning("retrieval_plan 为空，当前不会发起任何段落检索调用")
 
     tool_calls=[]
     pending_read_map = {}
@@ -133,7 +134,7 @@ def read_sections_node(workflow_state: ParseWorkFlowState) -> ParseWorkFlowState
 
             }
         )
-    print(f"ℹ️  准备调用 search_paragraph: plans={len(plans)}, tool_calls={len(tool_calls)}")
+    log_info(f"准备调用 search_paragraph: plans={len(plans)}, tool_calls={len(tool_calls)}")
     return {
         "messages": [
             AIMessage(
@@ -148,7 +149,7 @@ def read_sections_node(workflow_state: ParseWorkFlowState) -> ParseWorkFlowState
     }
 #  收集段落检索结果
 def collect_read_sections_node(workflow_state: ParseWorkFlowState) -> ParseWorkFlowState:
-    print("\n✅ 进入 : collect_read_sections_node")
+    log_success("进入 : collect_read_sections_node")
     pending = workflow_state.get("pending_read_map", {})
     out = []
 
@@ -166,7 +167,7 @@ def collect_read_sections_node(workflow_state: ParseWorkFlowState) -> ParseWorkF
             continue
 
         if data.get("error"):
-            print(f"❌ 段落检索失败: {data.get('error')}")
+            log_error(f"段落检索失败: {data.get('error')}")
             continue
         text = data.get("text")
         if not text:
@@ -176,9 +177,7 @@ def collect_read_sections_node(workflow_state: ParseWorkFlowState) -> ParseWorkF
             "evidence": meta.get("why_read", ""),  # 之前生成的 why_read
             "section": text,               # 检索出来的段落
         })
-        print(f"⚠️  检索到的段落：{text[:120]}，对应的证据需求是：{meta.get('why_read', '')}")
-    
-    print(f"ℹ️  read_sections 汇总: ok={len(out)}")
+    log_info(f"read_sections 汇总: ok={len(out)}")
     return {
         "already_read_sections": out,
         "current_step": "collect_read_sections_node",
@@ -190,8 +189,8 @@ def collect_read_sections_node(workflow_state: ParseWorkFlowState) -> ParseWorkF
 
 
 def generate_report_node(workflow_state: ParseWorkFlowState) -> ParseWorkFlowState:
-    print("\n✅ 进入 : generate_report_node")
-    print(f"ℹ️  生成报告输入证据条数: {len(workflow_state.get('already_read_sections') or [])}")
+    log_success("进入 : generate_report_node")
+    log_info(f"生成报告输入证据条数: {len(workflow_state.get('already_read_sections') or [])}")
     prompt = _GENERATE_REPORT_PROMPT.format(
         requirement=workflow_state["requirement"],
         already_read_sections=workflow_state["already_read_sections"],

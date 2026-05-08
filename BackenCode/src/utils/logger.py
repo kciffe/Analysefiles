@@ -82,6 +82,34 @@ def _caller_logger_name(stack_depth: int = 2) -> str:
         return caller_path.stem
 
 
+def _get_file_handler(
+    *,
+    log_file: str | Path,
+    max_bytes: int | str,
+    backup_count: int,
+    level: int,
+    handler_key_prefix: str = "",
+) -> RotatingFileHandler:
+    log_path = _resolve_log_file(log_file)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    handler_key = f"{handler_key_prefix}{log_path.resolve()}"
+    if handler_key not in _FILE_HANDLERS:
+        file_handler = RotatingFileHandler(
+            filename=log_path,
+            maxBytes=_parse_size(max_bytes),
+            backupCount=backup_count,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(IconFormatter(DEFAULT_LOG_FORMAT, datefmt=DEFAULT_DATE_FORMAT))
+        file_handler._handler_key = handler_key
+        _FILE_HANDLERS[handler_key] = file_handler
+
+    file_handler = _FILE_HANDLERS[handler_key]
+    file_handler.setLevel(level)
+    return file_handler
+
+
 def get_logger(
     name: str | None = None,
     level: int = logging.INFO,
@@ -94,11 +122,7 @@ def get_logger(
     logger.setLevel(level)
     logger.propagate = False
 
-    log_path = _resolve_log_file(log_file)
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-
     formatter = IconFormatter(DEFAULT_LOG_FORMAT, datefmt=DEFAULT_DATE_FORMAT)
-    handler_key = str(log_path.resolve())
 
     if not any(getattr(handler, "_handler_key", None) == "console" for handler in logger.handlers):
         console_handler = logging.StreamHandler()
@@ -107,21 +131,40 @@ def get_logger(
         console_handler._handler_key = "console"
         logger.addHandler(console_handler)
 
-    if handler_key not in _FILE_HANDLERS:
-        file_handler = RotatingFileHandler(
-            filename=log_path,
-            maxBytes=_parse_size(max_bytes),
-            backupCount=backup_count,
-            encoding="utf-8",
-        )
-        file_handler.setFormatter(formatter)
-        file_handler._handler_key = handler_key
-        _FILE_HANDLERS[handler_key] = file_handler
+    file_handler = _get_file_handler(
+        log_file=log_file,
+        max_bytes=max_bytes,
+        backup_count=backup_count,
+        level=level,
+    )
 
-    file_handler = _FILE_HANDLERS[handler_key]
-    file_handler.setLevel(level)
+    if not any(getattr(handler, "_handler_key", None) == file_handler._handler_key for handler in logger.handlers):
+        logger.addHandler(file_handler)
 
-    if not any(getattr(handler, "_handler_key", None) == handler_key for handler in logger.handlers):
+    return logger
+
+
+def get_file_logger(
+    name: str | None = None,
+    level: int = logging.INFO,
+    log_file: str | Path = DEFAULT_LOG_FILE,
+    max_bytes: int | str = DEFAULT_LOG_SIZE,
+    backup_count: int = DEFAULT_LOG_BACKUP_COUNT,
+) -> logging.Logger:
+    """Create a rotating-file logger without console output."""
+    logger = logging.getLogger(f"{name or _caller_logger_name()}.__file_only__")
+    logger.setLevel(level)
+    logger.propagate = False
+
+    file_handler = _get_file_handler(
+        log_file=log_file,
+        max_bytes=max_bytes,
+        backup_count=backup_count,
+        level=level,
+        handler_key_prefix="file-only:",
+    )
+
+    if not any(getattr(handler, "_handler_key", None) == file_handler._handler_key for handler in logger.handlers):
         logger.addHandler(file_handler)
 
     return logger
@@ -141,6 +184,22 @@ def log_warning(message: str, *args, **kwargs) -> None:
 
 def log_error(message: str, *args, **kwargs) -> None:
     get_logger(_caller_logger_name()).error(message, *args, **kwargs)
+
+
+def file_info(message: str, *args, **kwargs) -> None:
+    get_file_logger(_caller_logger_name()).info(message, *args, **kwargs)
+
+
+def file_success(message: str, *args, **kwargs) -> None:
+    get_file_logger(_caller_logger_name()).success(message, *args, **kwargs)
+
+
+def file_warning(message: str, *args, **kwargs) -> None:
+    get_file_logger(_caller_logger_name()).warning(message, *args, **kwargs)
+
+
+def file_error(message: str, *args, **kwargs) -> None:
+    get_file_logger(_caller_logger_name()).error(message, *args, **kwargs)
 
 
 logger = get_logger("app")

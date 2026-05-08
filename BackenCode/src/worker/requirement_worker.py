@@ -74,6 +74,7 @@ def iter_requirement_job_events(
     # 先检查任务是否存在，不存在就产出 failed 事件并结束。
     job = get_requirement_job(item_id)
     if job is None:
+        log_error(f"需求任务不存在: {item_id}")
         yield {
             "event": "failed",
             "data": {"id": item_id, "error": "需求目标不存在"},
@@ -82,6 +83,7 @@ def iter_requirement_job_events(
 
     # 设置任务为 processing 状态
     set_requirement_job_processing(item_id)
+    log_info(f"需求任务开始执行: {item_id}")
     yield {"event": "processing", "data": {"id": item_id, "step": "started"}}
 
     # 构建初始 state。
@@ -97,10 +99,10 @@ def iter_requirement_job_events(
 
 
         for update in updates_iter:
-            print(f"update: {update}")
             if "__interrupt__" in update:
                 question=extract_interrupt_question(update)
                 set_requirement_job_clarifying(item_id, question)
+                log_warning(f"需求任务等待澄清: {item_id}")
                 # 记录 对话历史，ass的内容
                 append_requirement_job_message(item_id, "assistant", question)
                 yield{
@@ -126,21 +128,25 @@ def iter_requirement_job_events(
             "reportMarkdown": final_state.get("report_markdown"),
         }
         set_requirement_job_success(item_id, result=result)
+        log_success(f"需求任务执行完成: {item_id}")
         yield {"event": "success", "data": {"id": item_id, "result": result}}
     except Exception as exc:
         set_requirement_job_failed(item_id, error=str(exc))
+        log_error(f"需求任务执行失败: {item_id}, error={exc}")
         yield {"event": "failed", "data": {"id": item_id, "error": str(exc)}}
 
     
 def resume_requirement_job(item_id: str,answer:str):
     job = get_requirement_job(item_id)
     if job is None:
+        log_error(f"需求任务不存在，无法恢复: {item_id}")
         return {"id": item_id, "error": "任务不存在","ok": False}
     
     main_config={ "configurable":{"thread_id":item_id} }
 
     append_requirement_job_message(item_id, "user", answer)
     set_requirement_job_processing(item_id)
+    log_info(f"需求任务收到澄清回复并恢复执行: {item_id}")
 
     final_state = None
 
@@ -149,6 +155,7 @@ def resume_requirement_job(item_id: str,answer:str):
         if "__interrupt__" in update:
             question=extract_interrupt_question(update)
             set_requirement_job_clarifying(item_id, question)
+            log_warning(f"需求任务再次等待澄清: {item_id}")
             # 记录 对话历史，ass的内容
             append_requirement_job_message(item_id, "assistant", question)
             return{
@@ -165,6 +172,7 @@ def resume_requirement_job(item_id: str,answer:str):
         "reportMarkdown":final_state.get("report_markdown")if final_state else None,
     }
     set_requirement_job_success(item_id,result=result)
+    log_success(f"需求任务恢复后执行完成: {item_id}")
     return {
         "id":item_id,
         "need_clarification":False,

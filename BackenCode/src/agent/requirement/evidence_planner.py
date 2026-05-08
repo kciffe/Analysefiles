@@ -5,6 +5,7 @@ from .llm import get_llm_without_tools
 from .prompt import _GENERATE_EVIDENCE_PROMPT
 from ...workflow.requirement import ParseWorkFlowState
 from ...schemas.requirement_type import ReTrievalPlan
+from ...utils import log_info
 
 def _parse_plan_array(text: str) -> list[ReTrievalPlan]:
     text = (text or "").strip()
@@ -31,8 +32,6 @@ def _parse_plan_array(text: str) -> list[ReTrievalPlan]:
 
 
 def generate_evidence_agent(parse_workflow_state: ParseWorkFlowState) -> list[ReTrievalPlan]:
-    print("\n⚠️ 进入 : generate_evidence_agent")
-
     llm = get_llm_without_tools()
     from .prompt import _EVALUATION_RUBRIC
     prompt = _GENERATE_EVIDENCE_PROMPT.format(
@@ -52,8 +51,6 @@ def generate_evidence_agent(parse_workflow_state: ParseWorkFlowState) -> list[Re
     content = result.content if isinstance(result.content, str) else str(result.content)
     plans = _parse_plan_array(content)
 
-    print(f"➕ 生成的检索计划数量：{len(plans)}")
-    for plan in plans:
-        print(f"ℹ️   - {plan}")
+    log_info(f"生成的检索计划数量：{len(plans)}")
     
     return  plans

@@ -1,6 +1,5 @@
 from pathlib import Path
 import sys
-from src.utils import format_messages
 from src.utils import log_info, log_success
 from langchain_core.messages import HumanMessage
 # from ..workflow.requirement.graph_scope import scope
@@ -30,7 +29,7 @@ def main() -> None:
             return
 
         result = invoke_scope_graph(user_input)
-        log_success(format_messages(result["messages"]))
+        log_success(f"Scope graph completed, messages={len(result.get('messages') or [])}")
 
 
 if __name__ == "__main__":

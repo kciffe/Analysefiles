@@ -23,6 +23,7 @@ from src.repositories.documents import (
     FileResource,
     store_parsed_document,
 )
+from src.utils import log_error, log_info, log_success, log_warning
 
 
 DEFAULT_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt", ".md"}
@@ -148,7 +149,7 @@ def parse_with_mineru(
             is_retryable = status_code is None or status_code >= 500 or status_code == 429
             if attempt == total_attempts or not is_retryable:
                 break
-            print(
+            log_warning(
                 f"  -> MinerU status={status_code}, retry {attempt}/{total_attempts} "
                 f"in {retry_wait:.1f}s ..."
             )
@@ -157,7 +158,7 @@ def parse_with_mineru(
             last_exc = exc
             if attempt == total_attempts:
                 break
-            print(
+            log_warning(
                 f"  -> MinerU request failed ({type(exc).__name__}), "
                 f"retry {attempt}/{total_attempts} in {retry_wait:.1f}s ..."
             )
@@ -783,8 +784,8 @@ def main() -> None:
         timeout_seconds=min(args.mineru_timeout, 5),
     )
     if not ok:
-        print(f"MinerU precheck failed: {detail}")
-        print(
+        log_error(f"MinerU precheck failed: {detail}")
+        log_error(
             "Please make sure MinerU service is running and listening on the target port. "
             "If using SSH tunnel, start it before import."
         )
@@ -793,10 +794,10 @@ def main() -> None:
     extensions = normalize_extensions(args.extensions)
     files = list_input_files(input_dir, args.recursive, extensions)
     if not files:
-        print(f"No files found in {input_dir} with extensions: {sorted(extensions)}")
+        log_warning(f"No files found in {input_dir} with extensions: {sorted(extensions)}")
         return
 
-    print(f"Found {len(files)} files. Start ingesting...")
+    log_info(f"Found {len(files)} files. Start ingesting...")
     success = 0
     duplicate_skipped = 0
     failed = 0
@@ -805,7 +806,7 @@ def main() -> None:
 
     for idx, path in enumerate(files, start=1):
         path_str = str(path)
-        print(f"[{idx}/{len(files)}] Processing: {path_str}")
+        log_info(f"[{idx}/{len(files)}] Processing: {path_str}")
         metadata: dict[str, Any] | None = None
         try:
             file_bytes = path.read_bytes()
@@ -836,7 +837,7 @@ def main() -> None:
                             path_str=path_str,
                         )
                         refreshed += 1
-                        print(
+                        log_info(
                             f"  -> refreshed old records "
                             f"(deleted file_resource ids={existing_ids})"
                         )
@@ -850,7 +851,7 @@ def main() -> None:
                 )
             # Count as success only after the session exits cleanly (commit succeeded).
             if inserted_ids is not None:
-                print(
+                log_success(
                     "  -> inserted "
                     f"(file_resource={inserted_ids.file_resource_id}, "
                     f"file_metadata={inserted_ids.file_metadata_id}, "
@@ -859,7 +860,7 @@ def main() -> None:
                 success += 1
         except KeyboardInterrupt:
             interrupted = True
-            print("Interrupted by user. Stopping batch import gracefully.")
+            log_warning("Interrupted by user. Stopping batch import gracefully.")
             break
         except IntegrityError as exc:
             if _is_source_title_unique_violation(exc) and metadata is not None:
@@ -869,33 +870,33 @@ def main() -> None:
                 existing = _find_existing_metadata_by_source_title(source, title)
                 if existing is not None:
                     existing_file_id, existing_metadata_id = existing
-                    print(
+                    log_warning(
                         "  -> skipped duplicate: title+source detected "
                         f"(title={title!r}, source={source!r}, "
                         f"existing_file_id={existing_file_id}, "
                         f"existing_metadata_id={existing_metadata_id})"
                     )
                 else:
-                    print(
+                    log_warning(
                         "  -> skipped duplicate: title+source detected "
                         f"(title={title!r}, source={source!r})"
                     )
                 continue
             failed += 1
-            print(f"  -> failed (db): {exc}")
+            log_error(f"  -> failed (db): {exc}")
         except Exception as exc:
             failed += 1
-            print(f"  -> failed: {exc}")
+            log_error(f"  -> failed: {exc}")
 
     if interrupted:
-        print(
+        log_warning(
             "Stopped. "
             f"success={success}, refreshed={refreshed}, "
             f"duplicate_skipped={duplicate_skipped}, failed={failed}, total={len(files)}"
         )
         return
 
-    print(
+    log_success(
         "Done. "
         f"success={success}, refreshed={refreshed}, "
         f"duplicate_skipped={duplicate_skipped}, failed={failed}, total={len(files)}"

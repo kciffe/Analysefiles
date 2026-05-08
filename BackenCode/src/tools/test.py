@@ -1,8 +1,8 @@
-import os
 import json
-from openai import  OpenAI
-from .search_paragraph import search_paragraph_tool,search_paragraph
-from .registry import TOOL_FUNCTIONS,TOOLS
+
+from openai import OpenAI
+
+from .registry import TOOL_FUNCTIONS, TOOLS
 
 client = OpenAI(
     base_url="https://api.deepseek.com",
@@ -29,7 +29,6 @@ while not terminate:
         tools=TOOLS,
         parallel_tool_calls=True
     )
-    print(completion.choices[0].message.content)
     if completion.choices[0].finish_reason == "tool_calls":
         tool_call = completion.choices[0].message.tool_calls[0]
         messages.append(
@@ -45,7 +44,6 @@ while not terminate:
                 ]
             }
         )
-        print(completion.choices[0])
         tool_name = tool_call.function.name
         args = json.loads(tool_call.function.arguments)
         response = TOOL_FUNCTIONS[tool_name](**args)
@@ -55,14 +53,11 @@ while not terminate:
                 "role": "tool",
                 "content": response,
                 "tool_call_id": tool_call.id,
-                "function":{
-                    "name":tool_name,
-                    "arguments":json.dumps(args,ensure_ascii=False)
+                "function": {
+                    "name": tool_name,
+                    "arguments": json.dumps(args, ensure_ascii=False)
                 }
             }
         )
-        print(f"[tool result] {response}")
     else:
-        print(f"[final response]{completion.choices[0].message.content}")
         terminate = True
-
