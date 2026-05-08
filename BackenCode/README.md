@@ -15,7 +15,7 @@ uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 Development mode
 ```
 uvicorn src.api.main:app --reload
-ssh -N -L 18081:127.0.0.1:8081 -p 10611 root@10.0.6.135
+ssh -N -L 18081:127.0.0.1:8081 -p 10711 root@10.0.6.135
 uv run uvicorn src.api.main:app --reload --env-file .env
 
 ```
@@ -24,7 +24,7 @@ uv run uvicorn src.api.main:app --reload --env-file .env
 启动参数第一个位置为输入目录路径：
 ```bash
 uv run python -m src.scripts.batch_import_docs "D:\\8\Desktop\\论文\\paper\\over" --source arxiv
-uv run python -m src.scripts.batch_import_docs "D:\\8\\Desktop\\论文\\paper\\over" --source arxiv  
+uv run python -m src.scripts.batch_import_docs "D:\\8\\Desktop\\论文\\Tongyi" --source arxiv  
 ```
 
 常用参数：

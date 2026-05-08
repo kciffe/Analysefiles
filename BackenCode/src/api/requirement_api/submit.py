@@ -1,4 +1,4 @@
-﻿import time
+﻿import asyncio
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from src.service.requirement_jobs import create_requirement_job, get_requirement_job
-from src.worker.requirement_worker import iter_requirement_job_events
+from src.worker.requirement_worker import iter_requirement_job_events,resume_requirement_job
 
 from ..schemas import ResponseModel
 from .schemas import (
@@ -14,6 +14,7 @@ from .schemas import (
     RequirementParseRequest,
     RequirementParseResponse,
     RequirementParseResultQueryResponse,
+    RequirementClarifyRequest,
 )
 
 router = APIRouter()
@@ -23,6 +24,7 @@ _STATUS_TO_API = {
     "processing": "运行中",
     "success": "已完成",
     "failed": "已失败",
+    "clarifying": "待澄清",
 }
 
 
@@ -42,6 +44,8 @@ def _build_result_payload(job: dict) -> RequirementParseResultQueryResponse:
         createdAt=job["createdAt"],
         result=result_payload,
         error=job.get("error"),
+        clarificationQuestion=job.get("clarificationQuestion")or None,
+        messages=job.get("messages")or[],
     )
 
 
@@ -49,7 +53,7 @@ def _build_result_payload(job: dict) -> RequirementParseResultQueryResponse:
 async def submit_requirement_parse(
     payload: RequirementParseRequest,
 ) -> ResponseModel[RequirementParseRecived]:
-    item_id = uuid4().hex
+    item_id = uuid4().hex # 后续这里需要明确设计一下
     created_at = datetime.now(timezone.utc).isoformat()
 
     create_requirement_job(
@@ -72,47 +76,57 @@ async def submit_requirement_parse(
 
 
 @router.get("/{item_id}/stream")
-def stream_requirement_progress(item_id: str) -> StreamingResponse:
+async def stream_requirement_progress(item_id: str) -> StreamingResponse:
     job = get_requirement_job(item_id)
     if job is None:
-        raise HTTPException(status_code=404, detail="Requirement item not found.")
+        raise HTTPException(status_code=404, detail="任务不存在")
 
-    def event_stream():
+    async def event_stream():
         job_snapshot = get_requirement_job(item_id)
-        if job_snapshot is None:
-            yield _format_sse("failed", '{"code":404,"msg":"Requirement item not found."}')
-            yield _format_sse("done", '{"ok": false}')
-            return
 
         status = str(job_snapshot["status"])
+        # 接收态，任务已经创建，但还没有真正开始执行
         if status == "received":
             req_data = job_snapshot.get("requirementData") or {}
             for event in iter_requirement_job_events(item_id, req_data):
                 name = str(event.get("event", "progress"))
                 payload = ResponseModel[dict](
                     code=200,
-                    msg="收到后端响应",
+                    msg="需求解析，收到后端响应",
                     data=event.get("data", {}),
                 )
                 yield _format_sse(name, payload.model_dump_json())
         else:
+            # 如果任务已经不是 received，说明它可能已经在运行、已经完成、失败，或者正在等待用户澄清。每隔一段时间重新读取任务状态。
             last = ""
             while True:
                 current = get_requirement_job(item_id)
                 if current is None:
                     break
                 now = str(current["status"])
-                if now != last:
+                if now == "clarifying":
+                    payload = ResponseModel[dict](
+                        code=200,
+                        msg="需要用户澄清",
+                        data={
+                            "id": item_id,
+                            "question": current.get("clarificationQuestion"),
+                            "messages": current.get("messages") or [],
+                        },
+                    )
+                    yield _format_sse("requirement_clarification", payload.model_dump_json())
+                    break
+                elif now != last:
                     payload = ResponseModel(
                         code=200,
-                        msg="收到后端响应",
+                        msg="收到后端响应，任务状态发生变化了。",
                         data=_build_result_payload(current),
                     )
                     yield _format_sse("state", payload.model_dump_json())
                     last = now
-                if now in {"success", "failed"}:
+                if now in {"success", "failed","clarifying"}:
                     break
-                time.sleep(0.5)
+                await asyncio.sleep(0.5)
 
         final_job = get_requirement_job(item_id)
         if final_job is not None:
@@ -135,20 +149,35 @@ def stream_requirement_progress(item_id: str) -> StreamingResponse:
         },
     )
 
+@router.post("/{item_id}/messages", response_model=ResponseModel[dict])
+async def send_requirement_message(
+    item_id: str,
+    payload: RequirementClarifyRequest
+) -> ResponseModel[dict]:
+    job = get_requirement_job(item_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="任务不存在")
 
-@router.get(
-    "/{item_id}/result",
-    response_model=ResponseModel[RequirementParseResultQueryResponse],
-)
+    if job["status"] != "clarifying":
+        raise HTTPException(status_code=400, detail="任务不处于待澄清状态.")
+    
+    res = resume_requirement_job(item_id, payload.answer)
+    return ResponseModel(
+        code=200,
+        msg="需求明确窗口，已提交用户回复",
+        data=res,)
+
+@router.get("/{item_id}/result",response_model=ResponseModel[RequirementParseResultQueryResponse])
 async def query_requirement_result(
     item_id: str,
 ) -> ResponseModel[RequirementParseResultQueryResponse]:
     job = get_requirement_job(item_id)
     if job is None:
-        raise HTTPException(status_code=404, detail="Requirement item not found.")
+        raise HTTPException(status_code=404, detail="任务不存在")
+
 
     return ResponseModel(
         code=200,
-        msg="收到后端响应",
+        msg="需求解析结果查询成功",
         data=_build_result_payload(job),
     )

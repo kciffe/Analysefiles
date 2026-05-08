@@ -29,15 +29,15 @@ class AgentState(MessagesState):
     # ....
 
 class ClarifyWithUser(BaseModel):
-    """用于判断是否需要向用户发起需求澄清，并生成对应问题与确认信息的结构化输出。"""
+    """用于判断是否需要向用户发起轻量需求澄清，并生成对应问题与确认信息的结构化输出。"""
     need_clarification:bool =Field(
-        description="是否需要用户继续澄清需求内容"
+        description="是否需要用户继续澄清需求内容。默认最多追问一次；用户已有主题和大致目标时通常为 false。"
     )
     question:str=Field(
-        description="用于询问需要用户澄清的具体内容"
+        description="用于询问需要用户澄清的具体内容。问题应简短自然，最多 2-3 个问题，并提供默认继续方案。"
     )
     verification:str=Field(
-        description="用于返回给用户是否当前获得的需求信息已经足以支撑开启后续研究"
+        description="用于返回给用户当前需求信息已经足以支撑开启后续研究的确认信息。"
     )
 
 class ResearchQuestion(BaseModel):

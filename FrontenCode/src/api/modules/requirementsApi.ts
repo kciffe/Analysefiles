@@ -17,10 +17,6 @@ export interface RequirementParseResponse {
   name: string
   status: string
   createdAt: string
-  need_clarification?: boolean
-  question?: string
-  verification?: string
-  research_brief?: string
 }
 
 interface RequirementRunResponse {
@@ -104,6 +100,21 @@ export interface RequirementReportResponse {
   createdAt?: string
   result?: RequirementReportPayload | null
   error?: string | null
+  clarificationQuestion?: string | null
+  messages?: RequirementChatMessage[]
+}
+
+export interface RequirementChatMessage {
+  role: 'user' | 'assistant' | 'system' | string
+  content: string
+}
+
+export interface RequirementMessageResponse {
+  id: string
+  need_clarification?: boolean
+  question?: string
+  result?: RequirementReportPayload
+  error?: string
 }
 
 export function getRequirementList() {
@@ -134,4 +145,9 @@ export function runRequirement(id: string) {
 // 报告展示
 export function getRequirementReport(id: string) {
   return http.get<any, RequirementReportResponse>(API.RequirementList.REPORT(id))
+}
+
+/** 提交需求澄清回复 */
+export function sendRequirementMessage(id: string, answer: string) {
+  return http.post<any, RequirementMessageResponse>(API.RequirementList.MESSAGE(id), { answer })
 }

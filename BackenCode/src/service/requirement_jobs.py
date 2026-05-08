@@ -25,6 +25,8 @@ def create_requirement_job(
             "requirementData": deepcopy(requirement_data),
             "result": None,
             "error": None,
+            "clarificationQuestion": None,
+            "messages": [],
         }
 
 
@@ -39,6 +41,7 @@ def set_requirement_job_processing(item_id: str) -> None:
         job = _jobs.get(item_id)
         if job is not None:
             job["status"] = "processing"
+            job["clarificationQuestion"] = None
 
 
 def set_requirement_job_success(item_id: str, *, result: dict[str, Any] | None = None) -> None:
@@ -56,3 +59,22 @@ def set_requirement_job_failed(item_id: str, *, error: str) -> None:
         if job is not None:
             job["status"] = "failed"
             job["error"] = error
+
+# 设定状态clarifying
+def set_requirement_job_clarifying(item_id:str,question:str)->None:
+    with _jobs_lock:
+        job=_jobs.get(item_id)
+        if job is not None:
+            job["status"]="clarifying"
+            job["clarificationQuestion"]=question
+            job["error"]=None
+
+# 追加消息函数
+def append_requirement_job_message(item_id: str, role: str, content: str) -> None:
+    with _jobs_lock:
+        job = _jobs.get(item_id)
+        if job is not None:
+            job.setdefault("messages", []).append({
+                "role": role,
+                "content": content,
+            })
