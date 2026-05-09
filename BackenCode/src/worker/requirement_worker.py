@@ -135,7 +135,63 @@ def iter_requirement_job_events(
         log_error(f"需求任务执行失败: {item_id}, error={exc}")
         yield {"event": "failed", "data": {"id": item_id, "error": str(exc)}}
 
-    
+
+def iter_resume_requirement_job_events(item_id: str, answer: str) -> Iterator[dict]:
+    job = get_requirement_job(item_id)
+    if job is None:
+        log_error(f"需求任务不存在，无法恢复: {item_id}")
+        yield {
+            "event": "failed",
+            "data": {"id": item_id, "error": "任务不存在"},
+        }
+        return
+
+    append_requirement_job_message(item_id, "user", answer)
+    set_requirement_job_processing(item_id)
+    log_info(f"需求任务收到澄清回复并恢复执行: {item_id}")
+    yield {"event": "processing", "data": {"id": item_id, "step": "resume"}}
+
+    main_config = {"configurable": {"thread_id": item_id}}
+    final_state = None
+
+    try:
+        for update in stream_requirement_graph(Command(resume=answer), main_config):
+            if "__interrupt__" in update:
+                question = extract_interrupt_question(update)
+                set_requirement_job_clarifying(item_id, question)
+                log_warning(f"需求任务再次等待澄清: {item_id}")
+                append_requirement_job_message(item_id, "assistant", question)
+                yield {
+                    "event": "requirement_clarification",
+                    "data": {"id": item_id, "question": question},
+                }
+                return
+
+            for node_name, node_delta in update.items():
+                step = node_delta.get("current_step") or node_name
+                final_state = {**(final_state or {}), **node_delta}
+                yield {
+                    "event": "progress",
+                    "data": {
+                        "id": item_id,
+                        "node": node_name,
+                        "step": step,
+                    },
+                }
+
+        result = {
+            "success": True,
+            "reportMarkdown": final_state.get("report_markdown") if final_state else None,
+        }
+        set_requirement_job_success(item_id, result=result)
+        log_success(f"需求任务恢复后执行完成: {item_id}")
+        yield {"event": "success", "data": {"id": item_id, "result": result}}
+    except Exception as exc:
+        set_requirement_job_failed(item_id, error=str(exc))
+        log_error(f"需求任务恢复执行失败: {item_id}, error={exc}")
+        yield {"event": "failed", "data": {"id": item_id, "error": str(exc)}}
+
+
 def resume_requirement_job(item_id: str,answer:str):
     job = get_requirement_job(item_id)
     if job is None:

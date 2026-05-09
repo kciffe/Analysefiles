@@ -5,8 +5,13 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from src.service.requirement_jobs import create_requirement_job, get_requirement_job
-from src.worker.requirement_worker import iter_requirement_job_events,resume_requirement_job
+from src.service.requirement_jobs import (
+    create_requirement_job,
+    get_requirement_job,
+    pop_requirement_job_pending_answer,
+    set_requirement_job_pending_answer,
+)
+from src.worker.requirement_worker import iter_requirement_job_events, iter_resume_requirement_job_events
 
 from ..schemas import ResponseModel
 from .schemas import (
@@ -96,6 +101,17 @@ async def stream_requirement_progress(item_id: str) -> StreamingResponse:
                     data=event.get("data", {}),
                 )
                 yield _format_sse(name, payload.model_dump_json())
+        elif status == "processing" and job_snapshot.get("pendingClarificationAnswer"):
+            answer = pop_requirement_job_pending_answer(item_id)
+            if answer is not None:
+                for event in iter_resume_requirement_job_events(item_id, answer):
+                    name = str(event.get("event", "progress"))
+                    payload = ResponseModel[dict](
+                        code=200,
+                        msg="需求澄清回复后继续执行",
+                        data=event.get("data", {}),
+                    )
+                    yield _format_sse(name, payload.model_dump_json())
         else:
             # 如果任务已经不是 received，说明它可能已经在运行、已经完成、失败，或者正在等待用户澄清。每隔一段时间重新读取任务状态。
             last = ""
@@ -161,11 +177,15 @@ async def send_requirement_message(
     if job["status"] != "clarifying":
         raise HTTPException(status_code=400, detail="任务不处于待澄清状态.")
     
-    res = resume_requirement_job(item_id, payload.answer)
+    set_requirement_job_pending_answer(item_id, payload.answer)
     return ResponseModel(
         code=200,
         msg="需求明确窗口，已提交用户回复",
-        data=res,)
+        data={
+            "id": item_id,
+            "need_clarification": False,
+            "pending": True,
+        },)
 
 @router.get("/{item_id}/result",response_model=ResponseModel[RequirementParseResultQueryResponse])
 async def query_requirement_result(

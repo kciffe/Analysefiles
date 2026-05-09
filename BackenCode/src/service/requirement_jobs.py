@@ -26,6 +26,7 @@ def create_requirement_job(
             "result": None,
             "error": None,
             "clarificationQuestion": None,
+            "pendingClarificationAnswer": None,
             "messages": [],
         }
 
@@ -67,7 +68,28 @@ def set_requirement_job_clarifying(item_id:str,question:str)->None:
         if job is not None:
             job["status"]="clarifying"
             job["clarificationQuestion"]=question
+            job["pendingClarificationAnswer"]=None
             job["error"]=None
+
+
+def set_requirement_job_pending_answer(item_id: str, answer: str) -> None:
+    with _jobs_lock:
+        job = _jobs.get(item_id)
+        if job is not None:
+            job["status"] = "processing"
+            job["clarificationQuestion"] = None
+            job["pendingClarificationAnswer"] = answer
+            job["error"] = None
+
+
+def pop_requirement_job_pending_answer(item_id: str) -> str | None:
+    with _jobs_lock:
+        job = _jobs.get(item_id)
+        if job is None:
+            return None
+        answer = job.get("pendingClarificationAnswer")
+        job["pendingClarificationAnswer"] = None
+        return answer
 
 # 追加消息函数
 def append_requirement_job_message(item_id: str, role: str, content: str) -> None:
