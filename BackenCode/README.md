@@ -36,3 +36,9 @@ uv run python -m src.scripts.batch_import_docs "D:\\8\\Desktop\\论文\\Tongyi" 
 --overwrite
 ```
 
+## 服务器洞穿代理
+```ssh
+ssh -N -R 17890:127.0.0.1:7890 root@10.0.6.135
+ssh -N -R 127.0.0.1:17890:127.0.0.1:7890 -L 1455:127.0.0.1:1455 root@10.0.6.135
+```
+

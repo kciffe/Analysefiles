@@ -190,17 +190,18 @@ function connectSSE() {
     if (data) updateFromResult(data as RequirementReportResponse)
   })
 
-  sse.addEventListener('result', async () => {
+  sse.addEventListener('result', (ev) => {
     if (clarificationQuestion.value && modifyDrawerVisible.value) return
-    await fetchReport()
+    const payload = JSON.parse((ev as MessageEvent).data)
+    const data = payload?.data
+    if (data) updateFromResult(data as RequirementReportResponse)
   })
 
-  sse.addEventListener('done', async () => {
+  sse.addEventListener('done', () => {
     if (clarificationQuestion.value && modifyDrawerVisible.value) {
       closeSSE()
       return
     }
-    await fetchReport()
     closeSSE()
     if (reportReady.value) ElMessage.success('报告生成完成')
   })

@@ -37,6 +37,15 @@ def _format_sse(event: str, data: str) -> str:
     return f"event: {event}\ndata: {data}\n\n"
 
 
+def _sse_json(event: str, *, msg: str, data) -> str:
+    payload = ResponseModel(
+        code=200,
+        msg=msg,
+        data=data,
+    )
+    return _format_sse(event, payload.model_dump_json())
+
+
 def _build_result_payload(job: dict) -> RequirementParseResultQueryResponse:
     status = str(job["status"])
     result = job.get("result") or None
@@ -52,6 +61,84 @@ def _build_result_payload(job: dict) -> RequirementParseResultQueryResponse:
         clarificationQuestion=job.get("clarificationQuestion")or None,
         messages=job.get("messages")or[],
     )
+
+
+def _stream_worker_events(events, *, msg: str):
+    for event in events:
+        yield _sse_json(
+            str(event.get("event", "progress")),
+            msg=msg,
+            data=event.get("data", {}),
+        )
+
+
+async def _stream_job_state(item_id: str):
+    last = ""
+    while True:
+        current = get_requirement_job(item_id)
+        if current is None:
+            break
+
+        status = str(current["status"])
+        if status == "clarifying":
+            yield _sse_json(
+                "requirement_clarification",
+                msg="需要用户澄清",
+                data={
+                    "id": item_id,
+                    "question": current.get("clarificationQuestion"),
+                    "messages": current.get("messages") or [],
+                },
+            )
+            break
+
+        if status != last:
+            yield _sse_json(
+                "state",
+                msg="收到后端响应，任务状态发生变化了。",
+                data=_build_result_payload(current),
+            )
+            last = status
+
+        if status in {"success", "failed", "clarifying"}:
+            break
+        await asyncio.sleep(0.5)
+
+
+async def _stream_job_events(item_id: str):
+    job = get_requirement_job(item_id)
+    if job is None:
+        return
+
+    status = str(job["status"])
+    if status == "received":
+        req_data = job.get("requirementData") or {}
+        for event in _stream_worker_events(
+            iter_requirement_job_events(item_id, req_data),
+            msg="需求解析，收到后端响应",
+        ):
+            yield event
+    elif status == "processing" and job.get("pendingClarificationAnswer"):
+        answer = pop_requirement_job_pending_answer(item_id)
+        if answer is not None:
+            for event in _stream_worker_events(
+                iter_resume_requirement_job_events(item_id, answer),
+                msg="需求澄清回复后继续执行",
+            ):
+                yield event
+    else:
+        async for event in _stream_job_state(item_id):
+            yield event
+
+    final_job = get_requirement_job(item_id)
+    if final_job is not None:
+        yield _sse_json(
+            "result",
+            msg="收到后端响应",
+            data=_build_result_payload(final_job),
+        )
+
+    yield _format_sse("done", '{"ok": true}')
 
 
 @router.post("/parse", response_model=ResponseModel[RequirementParseRecived])
@@ -87,73 +174,8 @@ async def stream_requirement_progress(item_id: str) -> StreamingResponse:
         raise HTTPException(status_code=404, detail="任务不存在")
 
     async def event_stream():
-        job_snapshot = get_requirement_job(item_id)
-
-        status = str(job_snapshot["status"])
-        # 接收态，任务已经创建，但还没有真正开始执行
-        if status == "received":
-            req_data = job_snapshot.get("requirementData") or {}
-            for event in iter_requirement_job_events(item_id, req_data):
-                name = str(event.get("event", "progress"))
-                payload = ResponseModel[dict](
-                    code=200,
-                    msg="需求解析，收到后端响应",
-                    data=event.get("data", {}),
-                )
-                yield _format_sse(name, payload.model_dump_json())
-        elif status == "processing" and job_snapshot.get("pendingClarificationAnswer"):
-            answer = pop_requirement_job_pending_answer(item_id)
-            if answer is not None:
-                for event in iter_resume_requirement_job_events(item_id, answer):
-                    name = str(event.get("event", "progress"))
-                    payload = ResponseModel[dict](
-                        code=200,
-                        msg="需求澄清回复后继续执行",
-                        data=event.get("data", {}),
-                    )
-                    yield _format_sse(name, payload.model_dump_json())
-        else:
-            # 如果任务已经不是 received，说明它可能已经在运行、已经完成、失败，或者正在等待用户澄清。每隔一段时间重新读取任务状态。
-            last = ""
-            while True:
-                current = get_requirement_job(item_id)
-                if current is None:
-                    break
-                now = str(current["status"])
-                if now == "clarifying":
-                    payload = ResponseModel[dict](
-                        code=200,
-                        msg="需要用户澄清",
-                        data={
-                            "id": item_id,
-                            "question": current.get("clarificationQuestion"),
-                            "messages": current.get("messages") or [],
-                        },
-                    )
-                    yield _format_sse("requirement_clarification", payload.model_dump_json())
-                    break
-                elif now != last:
-                    payload = ResponseModel(
-                        code=200,
-                        msg="收到后端响应，任务状态发生变化了。",
-                        data=_build_result_payload(current),
-                    )
-                    yield _format_sse("state", payload.model_dump_json())
-                    last = now
-                if now in {"success", "failed","clarifying"}:
-                    break
-                await asyncio.sleep(0.5)
-
-        final_job = get_requirement_job(item_id)
-        if final_job is not None:
-            payload = ResponseModel(
-                code=200,
-                msg="收到后端响应",
-                data=_build_result_payload(final_job),
-            )
-            yield _format_sse("result", payload.model_dump_json())
-
-        yield _format_sse("done", '{"ok": true}')
+        async for event in _stream_job_events(item_id):
+            yield event
 
     return StreamingResponse(
         event_stream(),

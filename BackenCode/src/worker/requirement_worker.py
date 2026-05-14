@@ -1,5 +1,5 @@
 ﻿from datetime import date, datetime
-from typing import Iterator
+from typing import Any, Iterator
 from langgraph.types import Command
 
 from ..schemas.requirement_type import RequirementParseRequest, SearchDocumentsRequest
@@ -66,101 +66,34 @@ def build_initial_state(
 
 # 取得中断时需要提供给用户的问题
 def extract_interrupt_question(update: dict):
-    res= update['__interrupt__'][0].value['question']
-    return res
-def iter_requirement_job_events(
-    item_id: str, requirement_data: RequirementParseRequest
+    return update["__interrupt__"][0].value["question"]
+
+
+def _failed_event(item_id: str, error: str) -> dict:
+    return {"event": "failed", "data": {"id": item_id, "error": error}}
+
+
+def _config(item_id: str) -> dict:
+    return {"configurable": {"thread_id": item_id}}
+
+
+def _iter_graph_events(
+    item_id: str,
+    graph_input: Any,
+    *,
+    success_log: str,
+    failed_log: str,
+    clarification_log: str,
 ) -> Iterator[dict]:
-    # 先检查任务是否存在，不存在就产出 failed 事件并结束。
-    job = get_requirement_job(item_id)
-    if job is None:
-        log_error(f"需求任务不存在: {item_id}")
-        yield {
-            "event": "failed",
-            "data": {"id": item_id, "error": "需求目标不存在"},
-        }
-        return
-
-    # 设置任务为 processing 状态
-    set_requirement_job_processing(item_id)
-    log_info(f"需求任务开始执行: {item_id}")
-    yield {"event": "processing", "data": {"id": item_id, "step": "started"}}
-
-    # 构建初始 state。
-    initial_state = build_initial_state(item_id, requirement_data)
-
-    main_config={
-        "configurable":{"thread_id":item_id}
-    }
-    try:
-        # stream_requirement_graph(...) 跑图，拿到每个节点更新时产出 progress（含 node/step）。
-        updates_iter = stream_requirement_graph(initial_state,main_config)
-        final_state: ParseWorkFlowState | None = None
-
-
-        for update in updates_iter:
-            if "__interrupt__" in update:
-                question=extract_interrupt_question(update)
-                set_requirement_job_clarifying(item_id, question)
-                log_warning(f"需求任务等待澄清: {item_id}")
-                # 记录 对话历史，ass的内容
-                append_requirement_job_message(item_id, "assistant", question)
-                yield{
-                    "event":"requirement_clarification",
-                    "data": {"id": item_id, "question": question}
-                }
-                return 
-
-            for node_name, node_delta in update.items():
-                step = node_delta.get("current_step") or node_name
-                final_state = {**(final_state or {}), **node_delta}
-                yield {
-                    "event": "progress",
-                    "data": {
-                        "id": item_id,
-                        "node": node_name,
-                        "step": step,
-                    },
-                }
-
-        result = {
-            "success": True,
-            "reportMarkdown": final_state.get("report_markdown"),
-        }
-        set_requirement_job_success(item_id, result=result)
-        log_success(f"需求任务执行完成: {item_id}")
-        yield {"event": "success", "data": {"id": item_id, "result": result}}
-    except Exception as exc:
-        set_requirement_job_failed(item_id, error=str(exc))
-        log_error(f"需求任务执行失败: {item_id}, error={exc}")
-        yield {"event": "failed", "data": {"id": item_id, "error": str(exc)}}
-
-
-def iter_resume_requirement_job_events(item_id: str, answer: str) -> Iterator[dict]:
-    job = get_requirement_job(item_id)
-    if job is None:
-        log_error(f"需求任务不存在，无法恢复: {item_id}")
-        yield {
-            "event": "failed",
-            "data": {"id": item_id, "error": "任务不存在"},
-        }
-        return
-
-    append_requirement_job_message(item_id, "user", answer)
-    set_requirement_job_processing(item_id)
-    log_info(f"需求任务收到澄清回复并恢复执行: {item_id}")
-    yield {"event": "processing", "data": {"id": item_id, "step": "resume"}}
-
-    main_config = {"configurable": {"thread_id": item_id}}
-    final_state = None
+    final_state: ParseWorkFlowState | None = None
 
     try:
-        for update in stream_requirement_graph(Command(resume=answer), main_config):
+        for update in stream_requirement_graph(graph_input, _config(item_id)):
             if "__interrupt__" in update:
                 question = extract_interrupt_question(update)
                 set_requirement_job_clarifying(item_id, question)
-                log_warning(f"需求任务再次等待澄清: {item_id}")
                 append_requirement_job_message(item_id, "assistant", question)
+                log_warning(f"{clarification_log}: {item_id}")
                 yield {
                     "event": "requirement_clarification",
                     "data": {"id": item_id, "question": question},
@@ -184,54 +117,52 @@ def iter_resume_requirement_job_events(item_id: str, answer: str) -> Iterator[di
             "reportMarkdown": final_state.get("report_markdown") if final_state else None,
         }
         set_requirement_job_success(item_id, result=result)
-        log_success(f"需求任务恢复后执行完成: {item_id}")
+        log_success(f"{success_log}: {item_id}")
         yield {"event": "success", "data": {"id": item_id, "result": result}}
     except Exception as exc:
         set_requirement_job_failed(item_id, error=str(exc))
-        log_error(f"需求任务恢复执行失败: {item_id}, error={exc}")
-        yield {"event": "failed", "data": {"id": item_id, "error": str(exc)}}
+        log_error(f"{failed_log}: {item_id}, error={exc}")
+        yield _failed_event(item_id, str(exc))
 
 
-def resume_requirement_job(item_id: str,answer:str):
+def iter_requirement_job_events(
+    item_id: str, requirement_data: RequirementParseRequest
+) -> Iterator[dict]:
+    job = get_requirement_job(item_id)
+    if job is None:
+        log_error(f"需求任务不存在: {item_id}")
+        yield _failed_event(item_id, "需求目标不存在")
+        return
+
+    set_requirement_job_processing(item_id)
+    log_info(f"需求任务开始执行: {item_id}")
+    yield {"event": "processing", "data": {"id": item_id, "step": "started"}}
+
+    yield from _iter_graph_events(
+        item_id,
+        build_initial_state(item_id, requirement_data),
+        success_log="需求任务执行完成",
+        failed_log="需求任务执行失败",
+        clarification_log="需求任务等待澄清",
+    )
+
+
+def iter_resume_requirement_job_events(item_id: str, answer: str) -> Iterator[dict]:
     job = get_requirement_job(item_id)
     if job is None:
         log_error(f"需求任务不存在，无法恢复: {item_id}")
-        return {"id": item_id, "error": "任务不存在","ok": False}
-    
-    main_config={ "configurable":{"thread_id":item_id} }
+        yield _failed_event(item_id, "任务不存在")
+        return
 
     append_requirement_job_message(item_id, "user", answer)
     set_requirement_job_processing(item_id)
     log_info(f"需求任务收到澄清回复并恢复执行: {item_id}")
+    yield {"event": "processing", "data": {"id": item_id, "step": "resume"}}
 
-    final_state = None
-
-    for update in stream_requirement_graph(Command(resume=answer),main_config):
-        # 再次触发中断
-        if "__interrupt__" in update:
-            question=extract_interrupt_question(update)
-            set_requirement_job_clarifying(item_id, question)
-            log_warning(f"需求任务再次等待澄清: {item_id}")
-            # 记录 对话历史，ass的内容
-            append_requirement_job_message(item_id, "assistant", question)
-            return{
-                "id":item_id,
-                "need_clarification":True,
-                "question":question,
-            }
-        # 若未继续触发中断，final_state增量更新
-        for _,node_delta in update.items():
-            final_state={**(final_state or {}),**node_delta}
-
-    result={
-        "success":True,
-        "reportMarkdown":final_state.get("report_markdown")if final_state else None,
-    }
-    set_requirement_job_success(item_id,result=result)
-    log_success(f"需求任务恢复后执行完成: {item_id}")
-    return {
-        "id":item_id,
-        "need_clarification":False,
-        "result":result,
-    }
-    
+    yield from _iter_graph_events(
+        item_id,
+        Command(resume=answer),
+        success_log="需求任务恢复后执行完成",
+        failed_log="需求任务恢复执行失败",
+        clarification_log="需求任务再次等待澄清",
+    )

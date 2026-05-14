@@ -13,7 +13,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_LOG_FILE = os.getenv("DEFAULT_LOG_FILE", "logs/app.log")
 DEFAULT_LOG_SIZE = os.getenv("DEFAULT_LOG_SIZE", "10MB")
 DEFAULT_LOG_BACKUP_COUNT = int(os.getenv("DEFAULT_LOG_BACKUP_COUNT", "10"))
-DEFAULT_LOG_FORMAT = os.getenv("DEFAULT_LOG_FORMAT", "%(level_icon)s [%(levelname)s] %(message)s")
+DEFAULT_LOG_FORMAT = os.getenv(
+    "DEFAULT_LOG_FORMAT",
+    "%(level_icon)s [%(levelname)s] %(asctime)s %(name)s.%(funcName)s:%(lineno)d %(message)s",
+)
 DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 SUCCESS_LEVEL = 25
 _FILE_HANDLERS: dict[str, RotatingFileHandler] = {}
@@ -23,6 +26,7 @@ logging.addLevelName(SUCCESS_LEVEL, "SUCCESS")
 
 def _success(self: logging.Logger, message: str, *args, **kwargs) -> None:
     if self.isEnabledFor(SUCCESS_LEVEL):
+        kwargs.setdefault("stacklevel", 2)
         self._log(SUCCESS_LEVEL, message, args, **kwargs)
 
 
@@ -171,34 +175,42 @@ def get_file_logger(
 
 
 def log_info(message: str, *args, **kwargs) -> None:
+    kwargs.setdefault("stacklevel", 2)
     get_logger(_caller_logger_name()).info(message, *args, **kwargs)
 
 
 def log_success(message: str, *args, **kwargs) -> None:
+    kwargs.setdefault("stacklevel", 3)
     get_logger(_caller_logger_name()).success(message, *args, **kwargs)
 
 
 def log_warning(message: str, *args, **kwargs) -> None:
+    kwargs.setdefault("stacklevel", 2)
     get_logger(_caller_logger_name()).warning(message, *args, **kwargs)
 
 
 def log_error(message: str, *args, **kwargs) -> None:
+    kwargs.setdefault("stacklevel", 2)
     get_logger(_caller_logger_name()).error(message, *args, **kwargs)
 
 
 def file_info(message: str, *args, **kwargs) -> None:
+    kwargs.setdefault("stacklevel", 2)
     get_file_logger(_caller_logger_name()).info(message, *args, **kwargs)
 
 
 def file_success(message: str, *args, **kwargs) -> None:
+    kwargs.setdefault("stacklevel", 3)
     get_file_logger(_caller_logger_name()).success(message, *args, **kwargs)
 
 
 def file_warning(message: str, *args, **kwargs) -> None:
+    kwargs.setdefault("stacklevel", 2)
     get_file_logger(_caller_logger_name()).warning(message, *args, **kwargs)
 
 
 def file_error(message: str, *args, **kwargs) -> None:
+    kwargs.setdefault("stacklevel", 2)
     get_file_logger(_caller_logger_name()).error(message, *args, **kwargs)
 
 
